@@ -4,6 +4,7 @@ import os
 
 from flask import Blueprint, jsonify, request
 
+from app.services.auth import get_auth_context
 from app.services.ingestion import IngestionError, IngestionService
 from app.services.scoring import screen_transaction
 from app.utils import extract_bearer_token
@@ -14,6 +15,17 @@ _SAMPLE_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
     "sample_transactions.csv",
 )
+
+
+def _get_token():
+    return extract_bearer_token(request.headers)
+
+
+def _require_auth(token):
+    ctx = get_auth_context(token)
+    if ctx["error"]:
+        return None, (jsonify({"error": ctx["error"]}), 401)
+    return ctx, None
 
 
 @bp.route("/sample", methods=["GET"])
@@ -32,7 +44,11 @@ def sample():
 @bp.route("/single", methods=["POST"])
 def single():
     """Screen a single manually-entered transaction after schema validation."""
-    token = extract_bearer_token(request.headers)
+    token = _get_token()
+    ctx, error = _require_auth(token)
+    if error:
+        return error
+
     body = request.get_json(force=True)
     if not isinstance(body, dict):
         return jsonify({"error": "Request body must be a single transaction object"}), 400
@@ -49,7 +65,11 @@ def single():
 @bp.route("/csv", methods=["POST"])
 def csv_import():
     """Ingest a CSV file. Use ?screen=true to screen every row immediately."""
-    token = extract_bearer_token(request.headers)
+    token = _get_token()
+    ctx, error = _require_auth(token)
+    if error:
+        return error
+
     screen = request.args.get("screen", "false").lower() == "true"
 
     if "file" not in request.files:

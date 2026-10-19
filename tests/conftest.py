@@ -1,6 +1,12 @@
+import os
+
 import pytest
 
 from app import create_app
+
+
+os.environ.setdefault("REQUIRE_AUTH", "false")
+os.environ.setdefault("REQUIRE_MFA", "false")
 
 
 @pytest.fixture

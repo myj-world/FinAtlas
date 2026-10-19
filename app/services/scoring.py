@@ -52,7 +52,16 @@ def screen_transaction(transaction: dict, user_token: Optional[str] = None) -> D
         "rules": rules,
     }
 
-    persist_screening(tx, deterministic_score, gemini_result, final_score, classification, user_token)
+    persist_screening(
+        tx,
+        deterministic_score,
+        gemini_result,
+        final_score,
+        classification,
+        user_token=user_token,
+        sanctions_hits=hits,
+        rules=rules,
+    )
     return result
 
 

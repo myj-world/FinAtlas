@@ -3,54 +3,275 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>FinAtlas — AML Screening</title>
+  <title>FinAtlas — AI AML Screening</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.0/dist/umd/supabase.min.js"></script>
+  <script>
+    window.__ENV__ = {
+      supabaseUrl: {{ supabase_url | tojson }},
+      supabaseKey: {{ supabase_key | tojson }}
+    };
+  </script>
 </head>
 <body>
-  <header>
-    <h1>FinAtlas</h1>
-    <p>AI-powered AML sanctions screening</p>
-  </header>
+  <div id="app">
+    <aside id="sidebar" class="sidebar hidden">
+      <div class="brand">
+        <div class="logo">FA</div>
+        <div>
+          <h1>FinAtlas</h1>
+          <span>AML Intelligence</span>
+        </div>
+      </div>
+      <nav>
+        <a href="#dashboard" class="nav-link active" data-view="dashboard">
+          <svg viewBox="0 0 24 24" width="18" height="18"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>
+          Dashboard
+        </a>
+        <a href="#screenings" class="nav-link" data-view="screenings">
+          <svg viewBox="0 0 24 24" width="18" height="18"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
+          Screenings
+        </a>
+        <a href="#cases" class="nav-link" data-view="cases">
+          <svg viewBox="0 0 24 24" width="18" height="18"><path d="M20 6h-4V4c0-1.11-.89-2-2-2h-4c-1.11 0-2 .89-2 2v2H4c-1.11 0-1.99.89-1.99 2L2 19c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2zm-6 0h-4V4h4v2z"/></svg>
+          Cases
+        </a>
+        <a href="#screen" class="nav-link" data-view="screen">
+          <svg viewBox="0 0 24 24" width="18" height="18"><path d="M9 11H7v2h2v-2zm4 0h-2v2h2v-2zm4 0h-2v2h2v-2zm2-7h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V9h14v11z"/></svg>
+          New Screening
+        </a>
+      </nav>
+      <div class="user-card">
+        <div class="user-info">
+          <span id="user-email" class="email">–</span>
+          <span id="mfa-badge" class="badge">MFA</span>
+        </div>
+        <button id="sign-out-btn" class="btn btn-ghost">Sign out</button>
+      </div>
+    </aside>
 
-  <main>
-    <section id="single-screening">
-      <h2>Single Transaction Screening</h2>
-      <form id="single-form">
-        <label>Transaction ID <input name="transactionId" required></label>
-        <label>Date <input name="transactionDate" type="date" required></label>
-        <label>Type <input name="transactionType" required></label>
-        <label>Amount <input name="amount" type="number" step="0.01" required></label>
-        <label>Currency <input name="currency" value="USD" required></label>
-        <label>Sender name <input name="senderName" required></label>
-        <label>Sender country <input name="senderCountry" required></label>
-        <label>Receiver name <input name="receiverName" required></label>
-        <label>Receiver country <input name="receiverCountry" required></label>
-        <button type="submit">Screen transaction</button>
-      </form>
-      <pre id="single-result"></pre>
-    </section>
+    <main class="main hidden" id="main">
+      <header class="topbar">
+        <h2 id="page-title">Dashboard</h2>
+        <div class="topbar-actions">
+          <button id="refresh-btn" class="btn btn-secondary">Refresh</button>
+        </div>
+      </header>
 
-    <section id="batch-screening">
-      <h2>Batch CSV Screening</h2>
-      <form id="batch-form" enctype="multipart/form-data">
-        <label>CSV file <input name="file" type="file" accept=".csv" required></label>
-        <button type="submit">Screen batch</button>
-      </form>
-      <pre id="batch-result"></pre>
-    </section>
+      <div id="toast" class="toast"></div>
 
-    <section id="sample-import">
-      <h2>Sample Dataset</h2>
-      <p>Load the built-in sample transactions, then screen them as a batch.</p>
-      <button id="load-sample">Load sample data</button>
-      <button id="screen-sample" disabled>Screen sample data</button>
-      <pre id="sample-result"></pre>
-    </section>
-  </main>
+      <!-- Auth views -->
+      <section id="auth-view" class="view">
+        <div class="auth-card">
+          <div class="brand brand-lg">
+            <div class="logo">FA</div>
+            <div>
+              <h1>FinAtlas</h1>
+              <span>AI-powered AML screening</span>
+            </div>
+          </div>
+          <div class="tabs">
+            <button class="tab active" data-tab="signin">Sign in</button>
+            <button class="tab" data-tab="signup">Create account</button>
+          </div>
+          <form id="signin-form" class="auth-form">
+            <label>Email <input type="email" name="email" required></label>
+            <label>Password <input type="password" name="password" minlength="6" required></label>
+            <button type="submit" class="btn btn-primary">Sign in</button>
+          </form>
+          <form id="signup-form" class="auth-form hidden">
+            <label>Email <input type="email" name="email" required></label>
+            <label>Password <input type="password" name="password" minlength="6" required></label>
+            <button type="submit" class="btn btn-primary">Create account</button>
+          </form>
+          <p class="auth-note">Investigator accounts require multi-factor authentication.</p>
+        </div>
+      </section>
 
-  <footer>
-    <p>FinAtlas — Phase 1 skeleton</p>
-  </footer>
+      <section id="mfa-view" class="view hidden">
+        <div class="auth-card">
+          <h2>Enable multi-factor authentication</h2>
+          <p>Scan the QR code with your authenticator app, then enter the 6-digit code.</p>
+          <div id="mfa-qr"></div>
+          <form id="mfa-form" class="auth-form">
+            <input type="hidden" id="mfa-factor-id">
+            <label>Verification code <input type="text" id="mfa-code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required></label>
+            <button type="submit" class="btn btn-primary">Verify and continue</button>
+          </form>
+        </div>
+      </section>
+
+      <section id="mfa-challenge-view" class="view hidden">
+        <div class="auth-card">
+          <h2>Multi-factor authentication</h2>
+          <p>Enter the 6-digit code from your authenticator app.</p>
+          <form id="mfa-challenge-form" class="auth-form">
+            <input type="hidden" id="mfa-challenge-factor-id">
+            <label>Verification code <input type="text" id="mfa-challenge-code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required></label>
+            <button type="submit" class="btn btn-primary">Verify</button>
+          </form>
+        </div>
+      </section>
+
+      <!-- Dashboard -->
+      <section id="dashboard-view" class="view hidden">
+        <div class="kpi-grid">
+          <div class="kpi">
+            <span class="kpi-label">Total Screenings</span>
+            <span id="kpi-total" class="kpi-value">–</span>
+          </div>
+          <div class="kpi kpi-high">
+            <span class="kpi-label">High Risk</span>
+            <span id="kpi-high" class="kpi-value">–</span>
+          </div>
+          <div class="kpi kpi-medium">
+            <span class="kpi-label">Medium Risk</span>
+            <span id="kpi-medium" class="kpi-value">–</span>
+          </div>
+          <div class="kpi kpi-low">
+            <span class="kpi-label">Low Risk</span>
+            <span id="kpi-low" class="kpi-value">–</span>
+          </div>
+          <div class="kpi">
+            <span class="kpi-label">Open Cases</span>
+            <span id="kpi-cases" class="kpi-value">–</span>
+          </div>
+          <div class="kpi kpi-alert">
+            <span class="kpi-label">Alert Disagreements</span>
+            <span id="kpi-disagreements" class="kpi-value">–</span>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="card">
+            <h3>Risk distribution</h3>
+            <div id="risk-chart" class="risk-chart"></div>
+          </div>
+          <div class="card">
+            <h3>Recent screenings</h3>
+            <div id="recent-screenings" class="recent-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Screenings list -->
+      <section id="screenings-view" class="view hidden">
+        <div class="card">
+          <div class="table-toolbar">
+            <input id="screenings-filter" type="search" placeholder="Filter by transaction ID...">
+          </div>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Transaction</th>
+                  <th>Deterministic</th>
+                  <th>Final</th>
+                  <th>Classification</th>
+                  <th>Date</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="screenings-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- Cases -->
+      <section id="cases-view" class="view hidden">
+        <div class="card">
+          <div class="table-toolbar">
+            <select id="cases-status-filter">
+              <option value="">All statuses</option>
+              <option value="open">Open</option>
+              <option value="in_review">In review</option>
+              <option value="resolved">Resolved</option>
+              <option value="closed">Closed</option>
+            </select>
+          </div>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Case ID</th>
+                  <th>Screening</th>
+                  <th>Status</th>
+                  <th>Notes</th>
+                  <th>Created</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="cases-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- New screening -->
+      <section id="screen-view" class="view hidden">
+        <div class="grid-2">
+          <div class="card">
+            <h3>Single transaction</h3>
+            <form id="single-form" class="screen-form">
+              <div class="form-grid">
+                <label>Transaction ID <input name="transactionId" required></label>
+                <label>Date <input name="transactionDate" type="date" required></label>
+                <label>Type <input name="transactionType" required></label>
+                <label>Amount <input name="amount" type="number" step="0.01" required></label>
+                <label>Currency <input name="currency" value="USD" required></label>
+                <label>Sender name <input name="senderName" required></label>
+                <label>Sender country <input name="senderCountry" required></label>
+                <label>Receiver name <input name="receiverName" required></label>
+                <label>Receiver country <input name="receiverCountry" required></label>
+              </div>
+              <button type="submit" class="btn btn-primary">Screen transaction</button>
+            </form>
+            <div id="single-result" class="result-box hidden"></div>
+          </div>
+
+          <div class="card">
+            <h3>Batch CSV screening</h3>
+            <form id="batch-form" class="screen-form" enctype="multipart/form-data">
+              <label>CSV file <input name="file" type="file" accept=".csv" required></label>
+              <label class="check"><input type="checkbox" id="batch-async" checked> Process in background (async)</label>
+              <button type="submit" class="btn btn-primary">Screen batch</button>
+            </form>
+            <div id="batch-result" class="result-box hidden"></div>
+            <div id="batch-progress" class="progress hidden">
+              <div class="progress-bar"><div id="batch-progress-fill" class="progress-fill"></div></div>
+              <span id="batch-progress-text">0%</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Sample dataset</h3>
+          <div class="actions">
+            <button id="load-sample" class="btn btn-secondary">Load sample data</button>
+            <button id="screen-sample" class="btn btn-primary" disabled>Screen sample data</button>
+          </div>
+          <pre id="sample-result" class="result-box hidden"></pre>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Detail modal -->
+  <div id="detail-modal" class="modal hidden">
+    <div class="modal-backdrop"></div>
+    <div class="modal-content">
+      <header class="modal-header">
+        <h3 id="modal-title">Screening detail</h3>
+        <button id="modal-close" class="btn btn-icon">&times;</button>
+      </header>
+      <div id="modal-body" class="modal-body"></div>
+      <footer class="modal-footer">
+        <button id="create-case-btn" class="btn btn-primary">Create case</button>
+      </footer>
+    </div>
+  </div>
 
   <script src="{{ url_for('static', filename='js/app.js') }}"></script>
 </body>

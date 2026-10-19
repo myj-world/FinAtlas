@@ -5,10 +5,14 @@ from flask_cors import CORS
 from werkzeug.exceptions import HTTPException
 from dotenv import load_dotenv
 
-from app.routes.health import bp as health_bp
-from app.routes.screening import bp as screening_bp
+from app.routes.auth import bp as auth_bp
+from app.routes.cases import bp as cases_bp
 from app.routes.dashboard import bp as dashboard_bp
+from app.routes.health import bp as health_bp
 from app.routes.ingest import bp as ingest_bp
+from app.routes.screening import bp as screening_bp
+from app.routes.screenings import bp as screenings_bp
+from app.services.batch import init_batch_worker
 from app.services.gemini import GeminiError
 
 
@@ -16,10 +20,16 @@ def _build_app() -> Flask:
     load_dotenv()
     app = Flask(__name__, static_folder="static", template_folder="templates")
     CORS(app, resources={r"/api/*": {"origins": "*"}})
+
     app.register_blueprint(health_bp)
     app.register_blueprint(screening_bp)
     app.register_blueprint(ingest_bp)
     app.register_blueprint(dashboard_bp)
+    app.register_blueprint(auth_bp)
+    app.register_blueprint(cases_bp)
+    app.register_blueprint(screenings_bp)
+
+    init_batch_worker(max_workers=4)
 
     @app.errorhandler(GeminiError)
     def handle_gemini_error(error):

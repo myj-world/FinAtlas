@@ -10,8 +10,8 @@ FinAtlas is an AI-powered AML platform combining deterministic sanctions list ma
 - **Sanctions Screening:** Direct matching against UNSC, EU, and OFAC consolidated lists.
 - **Rule-Based Scoring:** Heuristic risk scoring based on transaction amounts, high-risk jurisdictions, and execution patterns.
 - **Gemini AI Verification:** Contextual analysis to verify potential false positives and assign calibrated risk scores ($0.0 - 1.0$).
-- **REST APIs:** Developer-friendly endpoints for single (`/api/screen/single`) and batch (`/api/screen/batch`) screening.
-- **Risk Dashboard & Case Management:** Interactive investigation reports with persistent tracking via Supabase.
+- **REST APIs:** Developer-friendly endpoints for single (`/api/screen/single`) and batch (`/api/screen/batch`) screening, plus optional async background batch processing.
+- **Risk Dashboard & Case Management:** Interactive investigator reports with risk distributions, alert disagreements, Gemini explanations, and persistent per-user case tracking via Supabase.
 
 ## Technology Stack
 
@@ -30,16 +30,19 @@ FinAtlas is an AI-powered AML platform combining deterministic sanctions list ma
    If you are using the preview VM, `npm install` will run the same step automatically.
 2. Add the required secrets in the workspace Secrets panel (do not commit values):
    - `SUPABASE_URL`
-   - `SUPABASE_KEY` (Supabase anon key)
+   - `SUPABASE_KEY` or `SUPABASE_ANON_KEY` (Supabase anon key)
    - `GEMINI_API_KEY`
-3. Run the development server:
+   - `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` (used by the browser; in the preview VM these mirror the Supabase values)
+3. (Optional) Set `REQUIRE_AUTH=false` and `REQUIRE_MFA=false` for local development without Supabase Auth; never disable these in production.
+4. Run the development server:
    ```bash
    npm run dev
    # or directly
    python -m gunicorn -c gunicorn.conf.py wsgi:application
    ```
-4. Open the dashboard at the served URL (default http://localhost:8000).
-5. Run the unit tests:
+5. Open the dashboard at the served URL (default http://localhost:8000).
+6. Sign in or create an account. Investigator accounts are required to enroll TOTP-based multi-factor authentication.
+7. Run the unit tests:
    ```bash
    npm test
    # or directly
@@ -69,6 +72,17 @@ FinAtlas is an AI-powered AML platform combining deterministic sanctions list ma
 - `/api/screen/batch` now validates and cleans CSV/JSON input before screening.
 - WSGI callable fix so `app:create_app` works with Gunicorn as well as the standard `wsgi:application` target.
 - Frontend sample-dataset loader that fetches sample data and screens it as a batch.
+
+## Phase 4 scope
+
+- Supabase Auth integration with MFA enforcement (AAL2) on protected API endpoints and in the frontend.
+- Row-level security policies on `screenings`, `cases`, and `batches` so data is isolated per user.
+- Background batch screening: `POST /api/screen/batch?async=true` returns a `batch_id` immediately and processes rows in a worker thread; `GET /api/screen/batch/<id>` returns progress.
+- Dashboard API: `GET /api/screenings/stats` returns risk distributions, alert disagreements, recent screenings, and open-case counts.
+- Screenings API: `GET /api/screenings` and `GET /api/screenings/<id>` for listing and detail.
+- Cases API: `GET /api/cases`, `POST /api/cases`, `GET /api/cases/<id>`, `PATCH /api/cases/<id>`, `DELETE /api/cases/<id>`.
+- Auth API: `GET /api/auth/me` returns the current user and MFA status.
+- Modern vanilla-JS SPA dashboard with sidebar navigation, KPI cards, risk-distribution chart, screenings/cases tables, single/batch screening forms, and a screening-detail modal with Gemini explanations and case creation.
 
 ## Project Documentation
 

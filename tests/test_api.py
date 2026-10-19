@@ -115,3 +115,51 @@ class TestBatchScreenEndpoint:
     def test_batch_rejects_non_list_body(self, client):
         response = client.post("/api/screen/batch", json={"not": "a list"})
         assert response.status_code == 400
+
+
+class TestAuthEndpoint:
+    def test_me_when_auth_disabled(self, client):
+        response = client.get("/api/auth/me")
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["authenticated"] is False
+
+
+class TestScreeningsEndpoint:
+    def test_list_screenings_requires_no_auth_in_tests(self, client):
+        response = client.get("/api/screenings")
+        assert response.status_code == 200
+        data = response.get_json()
+        assert "screenings" in data
+
+
+class TestCasesEndpoint:
+    def test_create_case_missing_screening_id(self, client):
+        response = client.post("/api/cases", json={})
+        assert response.status_code == 400
+
+    def test_cases_list_requires_no_auth_in_tests(self, client):
+        response = client.get("/api/cases")
+        assert response.status_code == 200
+        data = response.get_json()
+        assert "cases" in data
+
+
+class TestAsyncBatchEndpoint:
+    def test_async_batch_without_supabase_returns_503(self, client, monkeypatch):
+        _patch_gemini(monkeypatch, result={"updated_risk_score": 0.0})
+        transactions = [
+            {
+                "transactionId": "TX-ASYNC-1",
+                "transactionDate": "2026-10-19",
+                "transactionType": "wire",
+                "amount": 50.0,
+                "currency": "USD",
+                "senderName": "A",
+                "senderCountry": "US",
+                "receiverName": "B",
+                "receiverCountry": "US",
+            }
+        ]
+        response = client.post("/api/screen/batch?async=true", json=transactions)
+        assert response.status_code == 503
