@@ -23,10 +23,32 @@ FinAtlas is an AI-powered AML platform combining deterministic sanctions list ma
 
 ## Getting Started
 
-1. Clone this repository.
-2. Install dependencies (`pip install -r requirements.txt`).
-3. Set environment variables for Supabase (`SUPABASE_URL`, `SUPABASE_KEY`) and Gemini (`GEMINI_API_KEY`).
-4. Start the Flask application and open it in your browser.
+1. Install Python dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+   If you are using the preview VM, `npm install` will run the same step automatically.
+2. Add the required secrets in the workspace Secrets panel (do not commit values):
+   - `SUPABASE_URL`
+   - `SUPABASE_KEY` (Supabase anon key)
+   - `GEMINI_API_KEY`
+3. Run the development server:
+   ```bash
+   npm run dev
+   # or directly
+   python -m gunicorn -c gunicorn.conf.py app:create_app
+   ```
+4. Open the dashboard at the served URL (default http://localhost:8000).
+
+## Phase 1 scope
+
+- Flask application factory and Gunicorn entrypoint.
+- RLS-ready Supabase schema for screenings and cases.
+- Deterministic sanctions matching against local `unsc.xml`, `eu.xml` and `ofac.xml`.
+- Deterministic rule scoring (sanctions hit, large transaction, high-risk jurisdiction).
+- Gemini REST client with bounded retries, structured-output validation, and explicit failure handling.
+- `/api/screen/single` and `/api/screen/batch` endpoints.
+- Minimal HTML/CSS/JS dashboard for manual and CSV screening.
 
 ## Project Documentation
 

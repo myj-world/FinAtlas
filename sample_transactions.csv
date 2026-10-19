@@ -1,0 +1,5 @@
+transactionId,transactionDate,transactionType,amount,currency,senderName,senderCountry,receiverName,receiverCountry
+TX-001,2026-10-19,wire,500.00,USD,John Smith,US,Jane Doe,US
+TX-002,2026-10-19,wire,1500.00,USD,Alice Brown,US,Bob Green,US
+TX-003,2026-10-19,swift,800.00,EUR,Carol White,DE,Kim Jong Un,KP
+TX-004,2026-10-19,ach,250.00,USD,David Lee,US,Emma Stone,US

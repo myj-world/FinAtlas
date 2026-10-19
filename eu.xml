@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<sanctions-list source="EU">
+  <entity id="EU-1">
+    <name>Alexander Lukashenko</name>
+    <aliases>
+      <alias>Alyaksandr Lukashenka</alias>
+    </aliases>
+  </entity>
+  <entity id="EU-2">
+    <name>Ramzan Kadyrov</name>
+    <aliases>
+      <alias>Ramzan Akhmadovich Kadyrov</alias>
+    </aliases>
+  </entity>
+</sanctions-list>

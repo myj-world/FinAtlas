@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<sanctions-list source="OFAC">
+  <entity id="OFAC-1">
+    <name>Joaquin Guzman Loera</name>
+    <aliases>
+      <alias>El Chapo</alias>
+      <alias>Joaquin Archivaldo Guzman Loera</alias>
+    </aliases>
+  </entity>
+  <entity id="OFAC-2">
+    <name>Dawood Ibrahim</name>
+    <aliases>
+      <alias>Dawood Ibrahim Kaskar</alias>
+    </aliases>
+  </entity>
+</sanctions-list>

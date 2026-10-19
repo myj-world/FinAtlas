@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<sanctions-list source="UNSC">
+  <entity id="UNSC-1">
+    <name>Kim Jong Un</name>
+    <aliases>
+      <alias>Kim Jong-Un</alias>
+    </aliases>
+  </entity>
+  <entity id="UNSC-2">
+    <name>Qassem Soleimani</name>
+    <aliases>
+      <alias>Qasim Soleimani</alias>
+    </aliases>
+  </entity>
+</sanctions-list>

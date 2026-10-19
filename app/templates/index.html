@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FinAtlas — AML Screening</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+  <header>
+    <h1>FinAtlas</h1>
+    <p>AI-powered AML sanctions screening</p>
+  </header>
+
+  <main>
+    <section id="single-screening">
+      <h2>Single Transaction Screening</h2>
+      <form id="single-form">
+        <label>Transaction ID <input name="transactionId" required></label>
+        <label>Date <input name="transactionDate" type="date" required></label>
+        <label>Type <input name="transactionType" required></label>
+        <label>Amount <input name="amount" type="number" step="0.01" required></label>
+        <label>Currency <input name="currency" value="USD" required></label>
+        <label>Sender name <input name="senderName" required></label>
+        <label>Sender country <input name="senderCountry" required></label>
+        <label>Receiver name <input name="receiverName" required></label>
+        <label>Receiver country <input name="receiverCountry" required></label>
+        <button type="submit">Screen transaction</button>
+      </form>
+      <pre id="single-result"></pre>
+    </section>
+
+    <section id="batch-screening">
+      <h2>Batch CSV Screening</h2>
+      <form id="batch-form" enctype="multipart/form-data">
+        <label>CSV file <input name="file" type="file" accept=".csv" required></label>
+        <button type="submit">Screen batch</button>
+      </form>
+      <pre id="batch-result"></pre>
+    </section>
+  </main>
+
+  <footer>
+    <p>FinAtlas — Phase 1 skeleton</p>
+  </footer>
+
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
