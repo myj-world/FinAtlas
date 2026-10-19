@@ -30,8 +30,11 @@ FinAtlas is an AI-powered AML platform combining deterministic sanctions list ma
 
 ## Project Documentation
 
-- [`SPEC.md`](SPEC.md) — Project scope, data schema, risk thresholds, and API specification.
-- [`AI_DISCLOSURE.md`](AI_DISCLOSURE.md) — AI tools, models, and third-party integration details.
+- [`SPEC.md`](SPEC.md) — System architecture, data schema, risk scoring thresholds, and API specifications.
+- [`AI_DISCLOSURE.md`](AI_DISCLOSURE.md) — Information on AI models (Gemini REST API), development tools, and third-party data sources.
+- [`AGENTS.md`](AGENTS.md) — Guidelines and agent personas used for automated development and code generation.
+- [`SKILLS.md`](SKILLS.md) — Custom workflows and automated execution skills configured for the workspace.
+- [`CONTEXT.md`](CONTEXT.md) — Real-time development state tracker for AI-assisted workflows.
 
 ## Deployment
 
