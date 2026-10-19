@@ -2,20 +2,22 @@
 
 ## AI-Assisted Development
 
-FinAtlas is being developed with assistance from AI-powered development tools, including DevMarketplace. These tools may assist with code generation, debugging, architecture, documentation, and implementation of application features.
+FinAtlas is being developed with assistance from AI-powered development tools, specifically DevMarketplace. This tool assist with code generation, debugging, architecture design, documentation, and feature implementation.
 
-AI-generated code and suggestions are reviewed, tested, and adapted by the team as part of the development process.
+All AI-generated code and suggestions are reviewed, tested, and adapted by the team as part of the development process.
 
 ## AI Within the Application
 
-FinAtlas uses a hosted AI model API as part of its core AML workflow. The model analyses transaction data to identify potential risks, uncover patterns that predefined rules may miss, challenge possible false-positive alerts, and generate structured investigation findings.
+FinAtlas integrates the **Gemini REST API** into its core AML screening pipeline. The AI engine:
+- Conducts contextual risk analysis on transaction data alongside deterministic sanctions list matching (UNSC, EU, OFAC).
+- Evaluates potential false positives resulting from direct or fuzzy name matches.
+- Generates structured risk reasoning and assigns a calibrated risk score (0.0 to 1.0).
 
-AI-generated assessments are treated as investigative indicators rather than definitive conclusions. Human review remains central to case decisions.
+AI-generated assessments serve as investigative indicators rather than definitive legal conclusions. Human review remains central to all final case decisions.
 
-## Third-Party Tools and Components
+## Third-Party Data & Component Declarations
 
-The project may use third-party APIs, libraries, frameworks, and services for the frontend, backend, authentication, database, and AI functionality. Specific dependencies, model providers, and their applicable licences will be documented as the implementation is finalised.
-
-## Transparency
-
-This disclosure will be updated to reflect the AI tools, models, APIs, and development assistance actually used in the final submission.
+- **AI Model Provider:** Gemini REST API (Google)
+- **Sanctions Reference Lists:** UNSC Consolidated List, EU Consolidated Sanctions List, OFAC Sanctions List
+- **Database & Authentication:** Supabase (PostgreSQL with Row Level Security & Auth)
+- **Backend Infrastructure:** Python & Flask
