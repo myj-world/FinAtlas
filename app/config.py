@@ -41,9 +41,12 @@ SANCTIONS_FILES = {
     "OFAC": "ofac.xml",
 }
 
+GEMINI_MODEL = "gemini-3.1-flash-lite"
+
 GEMINI_API_URL = (
     "https://generativelanguage.googleapis.com/v1beta/models/"
-    "gemini-1.5-flash:generateContent"
+    f"{GEMINI_MODEL}:generateContent"
 )
+
 GEMINI_TIMEOUT_SECONDS = int(os.getenv("GEMINI_TIMEOUT_SECONDS", "15"))
 GEMINI_MAX_RETRIES = int(os.getenv("GEMINI_MAX_RETRIES", "3"))
