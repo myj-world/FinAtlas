@@ -7,3 +7,6 @@ timeout = int(os.getenv("GUNICORN_TIMEOUT", "60"))
 loglevel = os.getenv("GUNICORN_LOG_LEVEL", "info")
 accesslog = "-"
 errorlog = "-"
+
+# Prefer the explicit WSGI module when no application argument is supplied.
+wsgi_app = "wsgi:application"

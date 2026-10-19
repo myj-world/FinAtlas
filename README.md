@@ -36,19 +36,39 @@ FinAtlas is an AI-powered AML platform combining deterministic sanctions list ma
    ```bash
    npm run dev
    # or directly
-   python -m gunicorn -c gunicorn.conf.py app:create_app
+   python -m gunicorn -c gunicorn.conf.py wsgi:application
    ```
 4. Open the dashboard at the served URL (default http://localhost:8000).
+5. Run the unit tests:
+   ```bash
+   npm test
+   # or directly
+   python -m pytest
+   ```
 
-## Phase 1 scope
+## Phase 2 scope
 
-- Flask application factory and Gunicorn entrypoint.
-- RLS-ready Supabase schema for screenings and cases.
-- Deterministic sanctions matching against local `unsc.xml`, `eu.xml` and `ofac.xml`.
-- Deterministic rule scoring (sanctions hit, large transaction, high-risk jurisdiction).
-- Gemini REST client with bounded retries, structured-output validation, and explicit failure handling.
+- Flask application factory and Gunicorn WSGI entrypoint (`wsgi.py`).
+- Exact/normalised deterministic sanctions matching against local `unsc.xml`, `eu.xml` and `ofac.xml`, including entity IDs and aliases.
+- Deterministic rule scoring (direct sanctions hit, large transaction >$1,000 USD, high-risk jurisdiction), cumulative and capped at `1.0`.
+- Gemini REST client with bounded retries, structured JSON output validation, and explicit failure handling.
+- Gemini score refinement: the deterministic score plus context is sent to Gemini, which returns the final score, confidence, reasoning and a false-positive assessment.
+- Risk classification thresholds: `>0.85` High, `0.50–0.85` Medium, `<0.50` Low.
 - `/api/screen/single` and `/api/screen/batch` endpoints.
+- Unit tests for sanctions matching, scoring and Gemini integration (Gemini mocked).
 - Minimal HTML/CSS/JS dashboard for manual and CSV screening.
+
+## Phase 3 scope
+
+- Robust import / ingestion system using Pandas for CSV parsing.
+- Schema validation for the FinAtlas transaction model (required + optional fields, numeric amount, supported currency, unknown-field rejection).
+- `/api/import/sample` — return the built-in `sample_transactions.csv` as JSON.
+- `/api/import/single` — validate and screen a manually-entered transaction.
+- `/api/import/csv` — ingest a CSV file; optional `?screen=true` to screen every row.
+- `/api/import/validate` — validate a JSON list or CSV upload without screening.
+- `/api/screen/batch` now validates and cleans CSV/JSON input before screening.
+- WSGI callable fix so `app:create_app` works with Gunicorn as well as the standard `wsgi:application` target.
+- Frontend sample-dataset loader that fetches sample data and screens it as a batch.
 
 ## Project Documentation
 

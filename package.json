@@ -5,7 +5,8 @@
   "private": true,
   "scripts": {
     "postinstall": "python -m pip install -r requirements.txt",
-    "dev": "python -m gunicorn -c gunicorn.conf.py app:create_app"
+    "dev": "python -m gunicorn -c gunicorn.conf.py wsgi:application",
+    "test": "python -m pytest"
   },
   "engines": {
     "node": ">=20"

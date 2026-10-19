@@ -7,7 +7,7 @@ from supabase import create_client
 
 def _get_supabase_client(user_token: Optional[str] = None):
     url = os.getenv("SUPABASE_URL")
-    key = os.getenv("SUPABASE_KEY")
+    key = os.getenv("SUPABASE_KEY") or os.getenv("SUPABASE_ANON_KEY")
     if not url or not key:
         return None
 

@@ -12,7 +12,9 @@ def health():
             "service": "FinAtlas AML API",
             "environment": {
                 "supabase_url_configured": bool(os.getenv("SUPABASE_URL")),
-                "supabase_key_configured": bool(os.getenv("SUPABASE_KEY")),
+                "supabase_key_configured": bool(
+                    os.getenv("SUPABASE_KEY") or os.getenv("SUPABASE_ANON_KEY")
+                ),
                 "gemini_api_key_configured": bool(os.getenv("GEMINI_API_KEY")),
             },
         }

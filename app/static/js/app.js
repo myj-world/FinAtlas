@@ -44,6 +44,41 @@ batchForm.addEventListener('submit', async (event) => {
   }
 });
 
+const loadSampleButton = document.getElementById('load-sample');
+const screenSampleButton = document.getElementById('screen-sample');
+const sampleResult = document.getElementById('sample-result');
+let sampleRecords = [];
+
+loadSampleButton.addEventListener('click', async () => {
+  sampleResult.textContent = 'Loading sample...';
+  try {
+    const response = await fetch('/api/import/sample');
+    const result = await response.json();
+    sampleRecords = result.records || [];
+    sampleResult.textContent = `Loaded ${sampleRecords.length} sample transactions.\n\n${JSON.stringify(sampleRecords, null, 2)}`;
+    screenSampleButton.disabled = sampleRecords.length === 0;
+  } catch (error) {
+    sampleResult.textContent = `Error: ${error.message}`;
+    screenSampleButton.disabled = true;
+  }
+});
+
+screenSampleButton.addEventListener('click', async () => {
+  if (sampleRecords.length === 0) return;
+  sampleResult.textContent = 'Screening sample...';
+  try {
+    const response = await fetch('/api/screen/batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(sampleRecords),
+    });
+    const result = await response.json();
+    sampleResult.textContent = JSON.stringify(result, null, 2);
+  } catch (error) {
+    sampleResult.textContent = `Error: ${error.message}`;
+  }
+});
+
 function colourise(element, classification) {
   element.classList.remove('high', 'medium', 'low');
   if (!classification) return;
