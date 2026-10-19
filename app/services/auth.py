@@ -5,7 +5,7 @@ import json
 import os
 from typing import Any, Dict, Optional, Tuple
 
-from supabase import create_client
+from supabase import Client, create_client
 
 
 def _decode_jwt_payload(token: str) -> Dict[str, Any]:
