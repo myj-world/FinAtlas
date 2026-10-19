@@ -4,12 +4,15 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>FinAtlas — AI AML Screening</title>
+  <link rel="icon" type="image/png" href="/icon.png">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.0/dist/umd/supabase.min.js"></script>
   <script>
     window.__ENV__ = {
       supabaseUrl: {{ supabase_url | tojson }},
-      supabaseKey: {{ supabase_key | tojson }}
+      supabaseKey: {{ supabase_key | tojson }},
+      requireAuth: {{ require_auth | tojson }},
+      requireMfa: {{ require_mfa | tojson }}
     };
   </script>
 </head>
@@ -17,7 +20,8 @@
   <div id="app">
     <aside id="sidebar" class="sidebar hidden">
       <div class="brand">
-        <div class="logo">FA</div>
+        <img id="brand-logo" src="/icon.png" alt="FinAtlas" class="brand-icon" onerror="this.style.display='none'; document.getElementById('brand-fallback').classList.remove('hidden')">
+        <div id="brand-fallback" class="logo hidden">FA</div>
         <div>
           <h1>FinAtlas</h1>
           <span>AML Intelligence</span>
@@ -36,9 +40,17 @@
           <svg viewBox="0 0 24 24" width="18" height="18"><path d="M20 6h-4V4c0-1.11-.89-2-2-2h-4c-1.11 0-2 .89-2 2v2H4c-1.11 0-1.99.89-1.99 2L2 19c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2zm-6 0h-4V4h4v2z"/></svg>
           Cases
         </a>
+        <a href="#batches" class="nav-link" data-view="batches">
+          <svg viewBox="0 0 24 24" width="18" height="18"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 9h-2V7h-2v5H6v2h2v5h2v-5h2v-2z"/></svg>
+          Batches
+        </a>
         <a href="#screen" class="nav-link" data-view="screen">
           <svg viewBox="0 0 24 24" width="18" height="18"><path d="M9 11H7v2h2v-2zm4 0h-2v2h2v-2zm4 0h-2v2h2v-2zm2-7h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V9h14v11z"/></svg>
           New Screening
+        </a>
+        <a href="#api" class="nav-link" data-view="api">
+          <svg viewBox="0 0 24 24" width="18" height="18"><path d="M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0l4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z"/></svg>
+          API
         </a>
       </nav>
       <div class="user-card">
@@ -52,7 +64,10 @@
 
     <main class="main hidden" id="main">
       <header class="topbar">
-        <h2 id="page-title">Dashboard</h2>
+        <div class="topbar-left">
+          <button id="menu-toggle" class="btn btn-icon menu-toggle" aria-label="Menu">☰</button>
+          <h2 id="page-title">Dashboard</h2>
+        </div>
         <div class="topbar-actions">
           <button id="refresh-btn" class="btn btn-secondary">Refresh</button>
         </div>
@@ -64,7 +79,8 @@
       <section id="auth-view" class="view">
         <div class="auth-card">
           <div class="brand brand-lg">
-            <div class="logo">FA</div>
+            <img src="/icon.png" alt="FinAtlas" class="brand-icon-lg" onerror="this.style.display='none'; this.nextElementSibling.classList.remove('hidden')">
+            <div class="logo hidden">FA</div>
             <div>
               <h1>FinAtlas</h1>
               <span>AI-powered AML screening</span>
@@ -75,16 +91,17 @@
             <button class="tab" data-tab="signup">Create account</button>
           </div>
           <form id="signin-form" class="auth-form">
-            <label>Email <input type="email" name="email" required></label>
-            <label>Password <input type="password" name="password" minlength="6" required></label>
+            <label>Email <input type="email" name="email" required autocomplete="email"></label>
+            <label>Password <input type="password" name="password" minlength="6" required autocomplete="current-password"></label>
             <button type="submit" class="btn btn-primary">Sign in</button>
           </form>
           <form id="signup-form" class="auth-form hidden">
-            <label>Email <input type="email" name="email" required></label>
-            <label>Password <input type="password" name="password" minlength="6" required></label>
+            <label>Email <input type="email" name="email" required autocomplete="email"></label>
+            <label>Password <input type="password" name="password" minlength="6" required autocomplete="new-password"></label>
             <button type="submit" class="btn btn-primary">Create account</button>
           </form>
           <p class="auth-note">Investigator accounts require multi-factor authentication.</p>
+          <button id="dev-skip-btn" class="btn btn-ghost dev-skip hidden">Continue without signing in (development)</button>
         </div>
       </section>
 
@@ -152,6 +169,12 @@
             <div id="recent-screenings" class="recent-list"></div>
           </div>
         </div>
+
+        <div class="card" style="margin-top:1.5rem">
+          <h3>Alert disagreement</h3>
+          <p class="text-muted">A disagreement happens when Gemini's final classification differs from the deterministic rule-based classification.</p>
+          <p id="disagreement-summary" class="text-muted"></p>
+        </div>
       </section>
 
       <!-- Screenings list -->
@@ -209,6 +232,30 @@
         </div>
       </section>
 
+      <!-- Batches -->
+      <section id="batches-view" class="view hidden">
+        <div class="card">
+          <div class="table-toolbar">
+            <button id="batches-refresh" class="btn btn-secondary">Refresh</button>
+          </div>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Batch ID</th>
+                  <th>Status</th>
+                  <th>Progress</th>
+                  <th>Succeeded</th>
+                  <th>Failed</th>
+                  <th>Created</th>
+                </tr>
+              </thead>
+              <tbody id="batches-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
       <!-- New screening -->
       <section id="screen-view" class="view hidden">
         <div class="grid-2">
@@ -246,13 +293,62 @@
           </div>
         </div>
 
-        <div class="card">
+        <div class="card" style="margin-top:1.5rem">
           <h3>Sample dataset</h3>
           <div class="actions">
             <button id="load-sample" class="btn btn-secondary">Load sample data</button>
             <button id="screen-sample" class="btn btn-primary" disabled>Screen sample data</button>
           </div>
           <pre id="sample-result" class="result-box hidden"></pre>
+        </div>
+      </section>
+
+      <!-- API docs -->
+      <section id="api-view" class="view hidden">
+        <div class="card">
+          <h3>REST API reference</h3>
+          <p class="text-muted">Protected endpoints accept a Supabase access token via <code>Authorization: Bearer &lt;token&gt;</code>.</p>
+
+          <div class="api-block">
+            <h4>POST /api/screen/single</h4>
+            <p class="text-muted">Screen one transaction and persist the result.</p>
+            <pre class="code-block">curl -X POST "https://your-host/api/screen/single" \\
+  -H "Authorization: Bearer &lt;token&gt;" \\
+  -H "Content-Type: application/json" \\
+  -d '{"transactionId":"TX-1","transactionDate":"2026-10-19","transactionType":"wire","amount":1500,"currency":"USD","senderName":"Alice","senderCountry":"US","receiverName":"Bob","receiverCountry":"GB"}'</pre>
+          </div>
+
+          <div class="api-block">
+            <h4>POST /api/screen/batch</h4>
+            <p class="text-muted">Screen a JSON list immediately, or upload a CSV. Add <code>?async=true</code> to queue background processing.</p>
+            <pre class="code-block">curl -X POST "https://your-host/api/screen/batch?async=true" \\
+  -H "Authorization: Bearer &lt;token&gt;" \\
+  -F "file=@transactions.csv"</pre>
+          </div>
+
+          <div class="api-block">
+            <h4>GET /api/screen/batch/&lt;batch_id&gt;</h4>
+            <p class="text-muted">Poll the status and results of a background batch job.</p>
+          </div>
+
+          <div class="api-block">
+            <h4>GET /api/screenings</h4>
+            <p class="text-muted">List persisted screenings for the signed-in investigator.</p>
+          </div>
+
+          <div class="api-block">
+            <h4>GET /api/screenings/stats</h4>
+            <p class="text-muted">Dashboard statistics: risk distribution, disagreements and open cases.</p>
+          </div>
+
+          <div class="api-block">
+            <h4>POST /api/cases</h4>
+            <p class="text-muted">Create an investigation case linked to a screening.</p>
+            <pre class="code-block">curl -X POST "https://your-host/api/cases" \\
+  -H "Authorization: Bearer &lt;token&gt;" \\
+  -H "Content-Type: application/json" \\
+  -d '{"screening_id":"&lt;id&gt;","status":"open","notes":"Escalated for review"}'</pre>
+          </div>
         </div>
       </section>
     </main>

@@ -6,25 +6,29 @@
   const env = window.__ENV__ || {};
   let supabase = null;
   let session = null;
+  let devMode = false;
   let currentScreening = null;
+  let allScreenings = [];
+  let allCases = [];
 
-  const views = {
-    auth: document.getElementById('auth-view'),
-    mfa: document.getElementById('mfa-view'),
-    mfaChallenge: document.getElementById('mfa-challenge-view'),
-    dashboard: document.getElementById('dashboard-view'),
-    screenings: document.getElementById('screenings-view'),
-    cases: document.getElementById('cases-view'),
-    screen: document.getElementById('screen-view'),
+  const viewTitles = {
+    auth: 'Authentication',
+    mfa: 'Multi-factor authentication',
+    mfaChallenge: 'Multi-factor authentication',
+    dashboard: 'Dashboard',
+    screenings: 'Screenings',
+    cases: 'Cases',
+    batches: 'Batches',
+    screen: 'New Screening',
+    api: 'API reference',
   };
 
-  const sidebar = document.getElementById('sidebar');
-  const main = document.getElementById('main');
+  function el(id) { return document.getElementById(id); }
 
   function init() {
     if (!env.supabaseUrl || !env.supabaseKey) {
       showToast('Supabase configuration is missing. Check workspace secrets.', 'error');
-      showView('auth');
+      showAuth();
       return;
     }
 
@@ -36,11 +40,14 @@
     bindNavigation();
     bindForms();
     bindModal();
+    bindMobileMenu();
 
     supabase.auth.getSession().then(({ data }) => {
       session = data.session;
       if (session) {
         onSessionReady();
+      } else if (!env.requireAuth) {
+        enableDevMode();
       } else {
         showAuth();
       }
@@ -50,39 +57,47 @@
   // --- Views ---------------------------------------------------------------
 
   function showView(name) {
-    Object.values(views).forEach((el) => el.classList.add('hidden'));
-    views[name].classList.remove('hidden');
+    document.querySelectorAll('.view').forEach((view) => view.classList.add('hidden'));
+    const target = el(`${name}-view`);
+    if (target) target.classList.remove('hidden');
 
     document.querySelectorAll('.nav-link').forEach((link) => {
       link.classList.toggle('active', link.dataset.view === name);
     });
 
-    const titles = {
-      dashboard: 'Dashboard',
-      screenings: 'Screenings',
-      cases: 'Cases',
-      screen: 'New Screening',
-      auth: 'Authentication',
-      mfa: 'Multi-factor authentication',
-      mfaChallenge: 'Multi-factor authentication',
-    };
-    document.getElementById('page-title').textContent = titles[name] || '';
+    const titleEl = el('page-title');
+    if (titleEl) titleEl.textContent = viewTitles[name] || '';
+
+    const sidebarEl = el('sidebar');
+    if (sidebarEl) sidebarEl.classList.remove('open');
 
     if (name === 'dashboard') loadDashboard();
     if (name === 'screenings') loadScreenings();
     if (name === 'cases') loadCases();
+    if (name === 'batches') loadBatches();
   }
 
   function showAuth() {
-    sidebar.classList.add('hidden');
-    main.classList.remove('hidden');
+    el('sidebar')?.classList.add('hidden');
+    el('main')?.classList.remove('hidden');
+    const skipBtn = el('dev-skip-btn');
+    if (skipBtn) skipBtn.classList.toggle('hidden', env.requireAuth);
     showView('auth');
   }
 
   function showApp() {
-    sidebar.classList.remove('hidden');
-    main.classList.remove('hidden');
+    el('sidebar')?.classList.remove('hidden');
+    el('main')?.classList.remove('hidden');
     showView('dashboard');
+  }
+
+  function enableDevMode() {
+    devMode = true;
+    session = null;
+    el('user-email').textContent = 'Development mode';
+    el('mfa-badge').classList.add('verified');
+    el('mfa-badge').textContent = 'No auth';
+    showApp();
   }
 
   // --- Auth ----------------------------------------------------------------
@@ -92,12 +107,12 @@
       tab.addEventListener('click', () => {
         document.querySelectorAll('.tab').forEach((t) => t.classList.remove('active'));
         tab.classList.add('active');
-        document.getElementById('signin-form').classList.toggle('hidden', tab.dataset.tab !== 'signin');
-        document.getElementById('signup-form').classList.toggle('hidden', tab.dataset.tab !== 'signup');
+        el('signin-form')?.classList.toggle('hidden', tab.dataset.tab !== 'signin');
+        el('signup-form')?.classList.toggle('hidden', tab.dataset.tab !== 'signup');
       });
     });
 
-    document.getElementById('signin-form').addEventListener('submit', async (e) => {
+    el('signin-form')?.addEventListener('submit', async (e) => {
       e.preventDefault();
       const data = new FormData(e.target);
       const { error } = await supabase.auth.signInWithPassword({
@@ -110,7 +125,7 @@
       onSessionReady();
     });
 
-    document.getElementById('signup-form').addEventListener('submit', async (e) => {
+    el('signup-form')?.addEventListener('submit', async (e) => {
       e.preventDefault();
       const data = new FormData(e.target);
       const { error } = await supabase.auth.signUp({
@@ -119,17 +134,20 @@
       });
       if (error) return showToast(error.message, 'error');
       showToast('Account created. Please check your email to confirm, then sign in.', 'success');
-      document.querySelector('[data-tab="signin"]').click();
+      document.querySelector('[data-tab="signin"]')?.click();
     });
 
-    document.getElementById('sign-out-btn').addEventListener('click', async () => {
+    el('sign-out-btn')?.addEventListener('click', async () => {
       await supabase.auth.signOut();
       session = null;
+      devMode = false;
       showAuth();
     });
 
-    document.getElementById('mfa-form').addEventListener('submit', verifyMfaEnrollment);
-    document.getElementById('mfa-challenge-form').addEventListener('submit', verifyMfaChallenge);
+    el('dev-skip-btn')?.addEventListener('click', enableDevMode);
+
+    el('mfa-form')?.addEventListener('submit', verifyMfaEnrollment);
+    el('mfa-challenge-form')?.addEventListener('submit', verifyMfaChallenge);
   }
 
   async function onSessionReady() {
@@ -137,7 +155,7 @@
       showAuth();
       return;
     }
-    document.getElementById('user-email').textContent = session.user.email;
+    el('user-email').textContent = session.user.email;
 
     const { data: factorsData, error } = await supabase.auth.mfa.listFactors();
     if (error) return showToast(error.message, 'error');
@@ -147,7 +165,7 @@
 
     if (totpFactors.length === 0) {
       await enrollMfa();
-    } else if (aal !== 'aal2') {
+    } else if (aal !== 'aal2' && env.requireMfa) {
       await challengeMfa(totpFactors[0].id);
     } else {
       await completeSignIn();
@@ -164,13 +182,13 @@
       return;
     }
 
-    const mfaBadge = document.getElementById('mfa-badge');
+    const mfaBadge = el('mfa-badge');
     if (me.mfa && me.mfa.verified) {
       mfaBadge.classList.add('verified');
       mfaBadge.textContent = 'MFA verified';
     } else {
       mfaBadge.classList.remove('verified');
-      mfaBadge.textContent = 'MFA required';
+      mfaBadge.textContent = env.requireMfa ? 'MFA required' : 'MFA optional';
     }
     showApp();
   }
@@ -191,16 +209,16 @@
     const { data, error } = await supabase.auth.mfa.enroll({ factorType: 'totp' });
     if (error) return showToast(error.message, 'error');
 
-    document.getElementById('mfa-factor-id').value = data.id;
-    const qrContainer = document.getElementById('mfa-qr');
-    qrContainer.innerHTML = data.totp.qr_code;
+    el('mfa-factor-id').value = data.id;
+    const qrContainer = el('mfa-qr');
+    if (qrContainer) qrContainer.innerHTML = data.totp.qr_code;
     showView('mfa');
   }
 
   async function verifyMfaEnrollment(e) {
     e.preventDefault();
-    const factorId = document.getElementById('mfa-factor-id').value;
-    const code = document.getElementById('mfa-code').value;
+    const factorId = el('mfa-factor-id').value;
+    const code = el('mfa-code').value;
 
     const { data: challenge, error: challengeError } = await supabase.auth.mfa.challenge({ factorId });
     if (challengeError) return showToast(challengeError.message, 'error');
@@ -219,14 +237,14 @@
   }
 
   async function challengeMfa(factorId) {
-    document.getElementById('mfa-challenge-factor-id').value = factorId;
+    el('mfa-challenge-factor-id').value = factorId;
     showView('mfaChallenge');
   }
 
   async function verifyMfaChallenge(e) {
     e.preventDefault();
-    const factorId = document.getElementById('mfa-challenge-factor-id').value;
-    const code = document.getElementById('mfa-challenge-code').value;
+    const factorId = el('mfa-challenge-factor-id').value;
+    const code = el('mfa-challenge-code').value;
 
     const { data: challenge, error: challengeError } = await supabase.auth.mfa.challenge({ factorId });
     if (challengeError) return showToast(challengeError.message, 'error');
@@ -253,16 +271,22 @@
         showView(link.dataset.view);
       });
     });
-    document.getElementById('refresh-btn').addEventListener('click', () => {
+    el('refresh-btn')?.addEventListener('click', () => {
       const active = document.querySelector('.nav-link.active');
       showView(active ? active.dataset.view : 'dashboard');
     });
   }
 
+  function bindMobileMenu() {
+    const toggle = el('menu-toggle');
+    const sidebar = el('sidebar');
+    toggle?.addEventListener('click', () => sidebar?.classList.toggle('open'));
+  }
+
   // --- API helpers ---------------------------------------------------------
 
   async function apiCall(path, options = {}) {
-    const headers = options.headers || {};
+    const headers = { ...(options.headers || {}) };
     if (session) headers.Authorization = `Bearer ${session.access_token}`;
     const response = await fetch(path, { ...options, headers });
     const data = await response.json().catch(() => ({}));
@@ -271,7 +295,8 @@
   }
 
   function showToast(message, type = 'info') {
-    const toast = document.getElementById('toast');
+    const toast = el('toast');
+    if (!toast) return;
     toast.textContent = message;
     toast.className = `toast ${type} show`;
     setTimeout(() => toast.classList.remove('show'), 4000);
@@ -283,19 +308,33 @@
     const stats = await apiCall('/api/screenings/stats');
     if (stats.error) return showToast(stats.error, 'error');
 
-    document.getElementById('kpi-total').textContent = stats.total_screenings || 0;
-    document.getElementById('kpi-high').textContent = (stats.risk_distribution['Definite Match / High Risk'] || 0);
-    document.getElementById('kpi-medium').textContent = (stats.risk_distribution['Potential Match / Medium Risk'] || 0);
-    document.getElementById('kpi-low').textContent = (stats.risk_distribution['No Match / Low Risk'] || 0);
-    document.getElementById('kpi-cases').textContent = stats.open_cases || 0;
-    document.getElementById('kpi-disagreements').textContent = stats.alert_disagreements || 0;
+    setText('kpi-total', stats.total_screenings || 0);
+    setText('kpi-high', stats.risk_distribution['Definite Match / High Risk'] || 0);
+    setText('kpi-medium', stats.risk_distribution['Potential Match / Medium Risk'] || 0);
+    setText('kpi-low', stats.risk_distribution['No Match / Low Risk'] || 0);
+    setText('kpi-cases', stats.open_cases || 0);
+    setText('kpi-disagreements', stats.alert_disagreements || 0);
 
     renderRiskChart(stats.risk_distribution || {});
     renderRecentScreenings(stats.recent_screenings || []);
+
+    const summary = el('disagreement-summary');
+    if (summary) {
+      const total = stats.total_screenings || 0;
+      const disagreements = stats.alert_disagreements || 0;
+      const pct = total ? Math.round((disagreements / total) * 100) : 0;
+      summary.textContent = `${disagreements} of ${total} screenings (${pct}%) had a different classification after Gemini review.`;
+    }
+  }
+
+  function setText(id, value) {
+    const node = el(id);
+    if (node) node.textContent = value;
   }
 
   function renderRiskChart(distribution) {
-    const container = document.getElementById('risk-chart');
+    const container = el('risk-chart');
+    if (!container) return;
     const order = [
       { key: 'Definite Match / High Risk', label: 'High risk', cls: 'high' },
       { key: 'Potential Match / Medium Risk', label: 'Medium risk', cls: 'medium' },
@@ -316,7 +355,8 @@
   }
 
   function renderRecentScreenings(screenings) {
-    const container = document.getElementById('recent-screenings');
+    const container = el('recent-screenings');
+    if (!container) return;
     if (!screenings.length) {
       container.innerHTML = '<p class="text-muted">No screenings yet.</p>';
       return;
@@ -338,8 +378,6 @@
 
   // --- Screenings ----------------------------------------------------------
 
-  let allScreenings = [];
-
   async function loadScreenings() {
     const data = await apiCall('/api/screenings');
     if (data.error) return showToast(data.error, 'error');
@@ -348,7 +386,8 @@
   }
 
   function renderScreenings(screenings) {
-    const tbody = document.getElementById('screenings-body');
+    const tbody = el('screenings-body');
+    if (!tbody) return;
     if (!screenings.length) {
       tbody.innerHTML = '<tr><td colspan="7" style="text-align:center">No screenings found.</td></tr>';
       return;
@@ -373,7 +412,7 @@
     });
   }
 
-  document.getElementById('screenings-filter').addEventListener('input', (e) => {
+  el('screenings-filter')?.addEventListener('input', (e) => {
     const term = e.target.value.toLowerCase();
     const filtered = allScreenings.filter((s) =>
       (s.transaction_id || '').toLowerCase().includes(term)
@@ -383,8 +422,6 @@
 
   // --- Cases ---------------------------------------------------------------
 
-  let allCases = [];
-
   async function loadCases() {
     const data = await apiCall('/api/cases');
     if (data.error) return showToast(data.error, 'error');
@@ -393,7 +430,8 @@
   }
 
   function renderCases(cases) {
-    const tbody = document.getElementById('cases-body');
+    const tbody = el('cases-body');
+    if (!tbody) return;
     if (!cases.length) {
       tbody.innerHTML = '<tr><td colspan="6" style="text-align:center">No cases found.</td></tr>';
       return;
@@ -433,21 +471,56 @@
     });
   }
 
-  document.getElementById('cases-status-filter').addEventListener('change', (e) => {
+  el('cases-status-filter')?.addEventListener('change', (e) => {
     const status = e.target.value;
     const filtered = status ? allCases.filter((c) => c.status === status) : allCases;
     renderCases(filtered);
   });
 
+  // --- Batches -------------------------------------------------------------
+
+  async function loadBatches() {
+    const data = await apiCall('/api/screen/batches');
+    if (data.error) return showToast(data.error, 'error');
+    renderBatches(data.batches || []);
+  }
+
+  function renderBatches(batches) {
+    const tbody = el('batches-body');
+    if (!tbody) return;
+    if (!batches.length) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center">No batch jobs found.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = batches.map((b) => {
+      const pct = b.total ? Math.round((b.processed / b.total) * 100) : 0;
+      return `
+        <tr data-id="${b.id}">
+          <td><code>${escapeHtml(b.id).slice(0, 8)}</code></td>
+          <td>${pillStatus(b.status)}</td>
+          <td>
+            <div class="progress-bar" style="width:140px"><div class="progress-fill" style="width:${pct}%"></div></div>
+            <span class="text-muted" style="font-size:0.75rem">${pct}%</span>
+          </td>
+          <td>${b.succeeded}</td>
+          <td>${b.failed}</td>
+          <td>${formatDate(b.created_at)}</td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  el('batches-refresh')?.addEventListener('click', loadBatches);
+
   // --- Screening forms -----------------------------------------------------
 
   function bindForms() {
-    const singleForm = document.getElementById('single-form');
-    singleForm.addEventListener('submit', async (e) => {
+    const singleForm = el('single-form');
+    singleForm?.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const resultBox = document.getElementById('single-result');
+      const resultBox = el('single-result');
       resultBox.classList.remove('hidden');
-      resultBox.innerHTML = '<p>Screening...</p>';
+      resultBox.innerHTML = '<p class="text-muted">Screening...</p>';
       const payload = formToObject(singleForm);
       const result = await apiCall('/api/screen/single', {
         method: 'POST',
@@ -457,17 +530,17 @@
       renderResult(resultBox, result);
     });
 
-    const batchForm = document.getElementById('batch-form');
-    batchForm.addEventListener('submit', async (e) => {
+    const batchForm = el('batch-form');
+    batchForm?.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const resultBox = document.getElementById('batch-result');
-      const progress = document.getElementById('batch-progress');
-      const fill = document.getElementById('batch-progress-fill');
-      const text = document.getElementById('batch-progress-text');
+      const resultBox = el('batch-result');
+      const progress = el('batch-progress');
+      const fill = el('batch-progress-fill');
+      const text = el('batch-progress-text');
 
       resultBox.classList.remove('hidden');
-      resultBox.innerHTML = '<p>Uploading...</p>';
-      const asyncMode = document.getElementById('batch-async').checked;
+      resultBox.innerHTML = '<p class="text-muted">Uploading...</p>';
+      const asyncMode = el('batch-async')?.checked;
       const formData = new FormData(batchForm);
 
       const result = await apiCall(`/api/screen/batch?async=${asyncMode}`, {
@@ -477,17 +550,17 @@
       renderResult(resultBox, result);
 
       if (asyncMode && result.batch_id) {
-        progress.classList.remove('hidden');
+        progress?.classList.remove('hidden');
         pollBatch(result.batch_id, progress, fill, text);
       }
     });
 
-    const loadSample = document.getElementById('load-sample');
-    const screenSample = document.getElementById('screen-sample');
-    const sampleResult = document.getElementById('sample-result');
+    const loadSample = el('load-sample');
+    const screenSample = el('screen-sample');
+    const sampleResult = el('sample-result');
     let sampleRecords = [];
 
-    loadSample.addEventListener('click', async () => {
+    loadSample?.addEventListener('click', async () => {
       sampleResult.classList.remove('hidden');
       sampleResult.innerHTML = 'Loading sample...';
       const data = await apiCall('/api/import/sample');
@@ -496,13 +569,13 @@
         return;
       }
       sampleRecords = data.records || [];
-      sampleResult.innerHTML = `<p>Loaded ${sampleRecords.length} sample transactions.</p><pre>${JSON.stringify(sampleRecords, null, 2)}</pre>`;
+      sampleResult.innerHTML = `<p class="text-muted">Loaded ${sampleRecords.length} sample transactions.</p><pre>${escapeHtml(JSON.stringify(sampleRecords, null, 2))}</pre>`;
       screenSample.disabled = sampleRecords.length === 0;
     });
 
-    screenSample.addEventListener('click', async () => {
+    screenSample?.addEventListener('click', async () => {
       if (!sampleRecords.length) return;
-      sampleResult.innerHTML = '<p>Screening sample...</p>';
+      sampleResult.innerHTML = '<p class="text-muted">Screening sample...</p>';
       const result = await apiCall('/api/screen/batch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -517,13 +590,13 @@
       const data = await apiCall(`/api/screen/batch/${batchId}`);
       if (data.error) {
         clearInterval(interval);
-        progressEl.classList.add('hidden');
+        progressEl?.classList.add('hidden');
         return showToast(data.error, 'error');
       }
 
       const pct = data.total ? Math.round((data.processed / data.total) * 100) : 0;
-      fillEl.style.width = `${pct}%`;
-      textEl.textContent = `${pct}% (${data.processed}/${data.total})`;
+      if (fillEl) fillEl.style.width = `${pct}%`;
+      if (textEl) textEl.textContent = `${pct}% (${data.processed}/${data.total})`;
 
       if (data.status === 'completed' || data.status === 'failed') {
         clearInterval(interval);
@@ -541,16 +614,15 @@
 
   function renderResult(element, result) {
     const status = result._status >= 400 ? 'error' : 'success';
-    element.innerHTML = `<pre class="${status}">${JSON.stringify(result, null, 2)}</pre>`;
+    element.innerHTML = `<pre class="${status}">${escapeHtml(JSON.stringify(result, null, 2))}</pre>`;
   }
 
   // --- Modal ---------------------------------------------------------------
 
   function bindModal() {
-    const modal = document.getElementById('detail-modal');
-    document.getElementById('modal-close').addEventListener('click', closeModal);
-    document.querySelector('.modal-backdrop').addEventListener('click', closeModal);
-    document.getElementById('create-case-btn').addEventListener('click', async () => {
+    el('modal-close')?.addEventListener('click', closeModal);
+    document.querySelector('.modal-backdrop')?.addEventListener('click', closeModal);
+    el('create-case-btn')?.addEventListener('click', async () => {
       if (!currentScreening) return;
       const res = await apiCall('/api/cases', {
         method: 'POST',
@@ -569,34 +641,34 @@
     const data = await apiCall(`/api/screenings/${id}`);
     if (data.error) return showToast(data.error, 'error');
     currentScreening = data;
-    document.getElementById('modal-title').textContent = `Screening: ${data.transaction_id || id}`;
+    el('modal-title').textContent = `Screening: ${data.transaction_id || id}`;
 
     const tx = data.transaction_data || {};
     const gemini = data.gemini_result || {};
     const rules = data.rules || [];
     const hits = data.sanctions_hits || [];
 
-    document.getElementById('modal-body').innerHTML = `
+    el('modal-body').innerHTML = `
       <div class="detail-section">
         <h4>Scores</h4>
-        <p><strong>Deterministic:</strong> ${Number(data.deterministic_score).toFixed(3)}</p>
-        <p><strong>Final:</strong> ${Number(data.final_score).toFixed(3)}</p>
+        <p><span class="score-pill ${scoreClass(data.deterministic_score)}">Deterministic: ${Number(data.deterministic_score).toFixed(3)}</span></p>
+        <p><span class="score-pill ${scoreClass(data.final_score)}">Final: ${Number(data.final_score).toFixed(3)}</span></p>
         <p><strong>Classification:</strong> ${pill(data.classification)}</p>
       </div>
       <div class="detail-section">
         <h4>Transaction</h4>
         <p><strong>ID:</strong> ${escapeHtml(tx.transactionId || 'N/A')}</p>
-        <p><strong>Amount:</strong> ${tx.amount || 0} ${tx.currency || ''}</p>
+        <p><strong>Amount:</strong> ${tx.amount || 0} ${escapeHtml(tx.currency || '')}</p>
         <p><strong>Sender:</strong> ${escapeHtml(tx.senderName || '')} (${escapeHtml(tx.senderCountry || '')})</p>
         <p><strong>Receiver:</strong> ${escapeHtml(tx.receiverName || '')} (${escapeHtml(tx.receiverCountry || '')})</p>
       </div>
       <div class="detail-section">
         <h4>Rules triggered</h4>
-        ${rules.length ? '<ul>' + rules.map((r) => `<li>${r.rule} (+${r.weight}) → ${r.cumulative_score}</li>`).join('') + '</ul>' : '<p>None</p>'}
+        ${rules.length ? '<ul>' + rules.map((r) => `<li>${escapeHtml(r.rule)} (+${r.weight}) → ${r.cumulative_score}</li>`).join('') + '</ul>' : '<p class="text-muted">None</p>'}
       </div>
       <div class="detail-section">
         <h4>Sanctions hits</h4>
-        ${hits.length ? '<ul>' + hits.map((h) => `<li>${h.list} — ${h.entity_id}</li>`).join('') + '</ul>' : '<p>None</p>'}
+        ${hits.length ? '<ul>' + hits.map((h) => `<li>${escapeHtml(h.list)} — ${escapeHtml(h.entity_id)}</li>`).join('') + '</ul>' : '<p class="text-muted">None</p>'}
       </div>
       ${gemini.reasoning ? `
         <div class="detail-section">
@@ -608,11 +680,11 @@
       ` : ''}
     `;
 
-    document.getElementById('detail-modal').classList.remove('hidden');
+    el('detail-modal').classList.remove('hidden');
   }
 
   function closeModal() {
-    document.getElementById('detail-modal').classList.add('hidden');
+    el('detail-modal')?.classList.add('hidden');
     currentScreening = null;
   }
 
@@ -624,6 +696,22 @@
     if (classification.includes('High')) cls = 'pill-high';
     else if (classification.includes('Medium')) cls = 'pill-medium';
     return `<span class="pill ${cls}">${escapeHtml(classification)}</span>`;
+  }
+
+  function pillStatus(status) {
+    const map = {
+      completed: 'pill-low',
+      running: 'pill-medium',
+      pending: 'pill-medium',
+      failed: 'pill-high',
+    };
+    return `<span class="pill ${map[status] || ''}">${escapeHtml(status)}</span>`;
+  }
+
+  function scoreClass(score) {
+    if (score > 0.85) return 'pill-high';
+    if (score >= 0.5) return 'pill-medium';
+    return 'pill-low';
   }
 
   function escapeHtml(str) {
@@ -639,7 +727,7 @@
   function formatDate(iso) {
     if (!iso) return '–';
     const d = new Date(iso);
-    return d.toLocaleString();
+    return isNaN(d) ? '–' : d.toLocaleString();
   }
 
   init();

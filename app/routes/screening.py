@@ -4,7 +4,7 @@ from app.services.auth import get_auth_context
 from app.services.batch import submit_batch
 from app.services.ingestion import IngestionError, IngestionService
 from app.services.scoring import screen_transaction
-from app.services.store import fetch_batch, persist_batch as store_persist_batch
+from app.services.store import fetch_batch, fetch_batches, persist_batch as store_persist_batch
 from app.utils import extract_bearer_token
 
 bp = Blueprint("screening", __name__, url_prefix="/api/screen")
@@ -83,3 +83,18 @@ def batch_status(batch_id):
         return jsonify({"error": "Batch not found"}), 404
 
     return jsonify(batch)
+
+
+@bp.route("/batches", methods=["GET"])
+def list_batches():
+    """List the authenticated user's background batch jobs."""
+    token = extract_bearer_token(request.headers)
+    ctx = get_auth_context(token)
+
+    if ctx["error"]:
+        return jsonify({"error": ctx["error"]}), 401
+
+    limit = request.args.get("limit", 50, type=int)
+    offset = request.args.get("offset", 0, type=int)
+    batches = fetch_batches(token, limit=limit, offset=offset)
+    return jsonify({"count": len(batches), "batches": batches})

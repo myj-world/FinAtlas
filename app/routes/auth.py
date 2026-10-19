@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify, request
 
-from app.services.auth import check_mfa_level, get_auth_context
+from app.services.auth import check_mfa_level, get_auth_context, mfa_required
 from app.utils import extract_bearer_token
 
 bp = Blueprint("auth", __name__, url_prefix="/api/auth")
