@@ -42,6 +42,15 @@
     bindModal();
     bindMobileMenu();
 
+    supabase.auth.onAuthStateChange((event, newSession) => {
+      if (event === 'TOKEN_REFRESHED') session = newSession;
+      if (event === 'SIGNED_OUT') {
+        session = null;
+        devMode = false;
+        showAuth();
+      }
+    });
+
     supabase.auth.getSession().then(({ data }) => {
       session = data.session;
       if (session) {
@@ -160,13 +169,13 @@
     const { data: factorsData, error } = await supabase.auth.mfa.listFactors();
     if (error) return showToast(error.message, 'error');
 
-    const totpFactors = factorsData.all.filter((f) => f.factor_type === 'totp');
+    const verifiedFactors = (factorsData.totp || []).filter((f) => f.status === 'verified');
     const aal = decodeAal(session.access_token);
 
-    if (totpFactors.length === 0) {
+    if (verifiedFactors.length === 0 && env.requireMfa) {
       await enrollMfa();
     } else if (aal !== 'aal2' && env.requireMfa) {
-      await challengeMfa(totpFactors[0].id);
+      await challengeMfa(verifiedFactors[0].id);
     } else {
       await completeSignIn();
     }
@@ -317,6 +326,7 @@
 
     renderRiskChart(stats.risk_distribution || {});
     renderRecentScreenings(stats.recent_screenings || []);
+    renderDisagreements(stats.disagreement_screenings || [], stats.total_screenings || 0);
 
     const summary = el('disagreement-summary');
     if (summary) {
@@ -372,6 +382,43 @@
     `).join('');
 
     container.querySelectorAll('.recent-item').forEach((item) => {
+      item.addEventListener('click', () => openScreeningDetail(item.dataset.id));
+    });
+  }
+
+  function classifyLabel(score) {
+    const n = Number(score) || 0;
+    if (n > 0.85) return 'Definite Match / High Risk';
+    if (n >= 0.5) return 'Potential Match / Medium Risk';
+    return 'No Match / Low Risk';
+  }
+
+  function renderDisagreements(screenings, total) {
+    const container = el('disagreement-list');
+    if (!container) return;
+    if (!screenings.length) {
+      container.innerHTML = '<p class="text-muted">No alert disagreements found.</p>';
+      return;
+    }
+    container.innerHTML = screenings.map((s) => {
+      const detClass = classifyLabel(s.deterministic_score);
+      const finalClass = classifyLabel(s.final_score);
+      const reasoning = (s.gemini_result && s.gemini_result.reasoning) || 'No explanation available.';
+      return `
+        <div class="disagreement-item" data-id="${s.id}">
+          <div class="disagreement-header">
+            <div class="disagreement-meta">
+              <span class="recent-id">${escapeHtml(s.transaction_id || 'Unknown')}</span>
+              <span class="text-muted">${formatDate(s.created_at)}</span>
+            </div>
+            <div class="disagreement-shift">${pill(detClass)} <span class="text-muted">→</span> ${pill(finalClass)}</div>
+          </div>
+          <p class="disagreement-reason">${escapeHtml(reasoning)}</p>
+        </div>
+      `;
+    }).join('');
+
+    container.querySelectorAll('.disagreement-item').forEach((item) => {
       item.addEventListener('click', () => openScreeningDetail(item.dataset.id));
     });
   }
@@ -442,7 +489,7 @@
         <tr data-id="${c.id}">
           <td><code>${escapeHtml(c.id).slice(0, 8)}</code></td>
           <td>${escapeHtml(screening.transaction_id || c.screening_id || 'Unknown')}</td>
-          <td><span class="pill">${escapeHtml(c.status)}</span></td>
+          <td>${caseStatusPill(c.status)}</td>
           <td>${escapeHtml((c.notes || '').slice(0, 60))}</td>
           <td>${formatDate(c.created_at)}</td>
           <td>
@@ -704,6 +751,16 @@
       running: 'pill-medium',
       pending: 'pill-medium',
       failed: 'pill-high',
+    };
+    return `<span class="pill ${map[status] || ''}">${escapeHtml(status)}</span>`;
+  }
+
+  function caseStatusPill(status) {
+    const map = {
+      open: 'pill-high',
+      in_review: 'pill-medium',
+      resolved: 'pill-low',
+      closed: '',
     };
     return `<span class="pill ${map[status] || ''}">${escapeHtml(status)}</span>`;
   }

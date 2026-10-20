@@ -6,7 +6,7 @@
   <title>FinAtlas — AI AML Screening</title>
   <link rel="icon" type="image/png" href="/icon.png">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.0/dist/umd/supabase.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.109.0/dist/umd/supabase.min.js"></script>
   <script>
     window.__ENV__ = {
       supabaseUrl: {{ supabase_url | tojson }},
@@ -171,9 +171,10 @@
         </div>
 
         <div class="card" style="margin-top:1.5rem">
-          <h3>Alert disagreement</h3>
+          <h3>Alert disagreements & explanations</h3>
           <p class="text-muted">A disagreement happens when Gemini's final classification differs from the deterministic rule-based classification.</p>
           <p id="disagreement-summary" class="text-muted"></p>
+          <div id="disagreement-list" class="disagreement-list"></div>
         </div>
       </section>
 

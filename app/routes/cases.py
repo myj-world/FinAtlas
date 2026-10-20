@@ -12,6 +12,8 @@ from app.utils import extract_bearer_token
 
 bp = Blueprint("cases", __name__, url_prefix="/api/cases")
 
+_ALLOWED_STATUSES = {"open", "in_review", "resolved", "closed"}
+
 
 def _get_user_token():
     return extract_bearer_token(request.headers)
@@ -50,6 +52,9 @@ def create_case():
         return jsonify({"error": "screening_id is required"}), 400
 
     status = body.get("status", "open")
+    if status not in _ALLOWED_STATUSES:
+        return jsonify({"error": f"status must be one of: {', '.join(sorted(_ALLOWED_STATUSES))}"}), 400
+
     notes = body.get("notes")
     case = persist_case(token, screening_id, status=status, notes=notes)
     if case is None:
@@ -79,10 +84,14 @@ def patch_case(case_id):
         return error
 
     body = request.get_json(force=True)
+    status = body.get("status")
+    if status is not None and status not in _ALLOWED_STATUSES:
+        return jsonify({"error": f"status must be one of: {', '.join(sorted(_ALLOWED_STATUSES))}"}), 400
+
     case = update_case(
         token,
         case_id,
-        status=body.get("status"),
+        status=status,
         notes=body.get("notes"),
     )
     if case is None:

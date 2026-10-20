@@ -274,7 +274,7 @@ def fetch_dashboard_stats(user_token: str) -> Dict[str, Any]:
     try:
         all_screenings = (
             client.table("screenings")
-            .select("id, deterministic_score, final_score, classification, transaction_id, created_at")
+            .select("id, deterministic_score, final_score, classification, transaction_id, created_at, gemini_result")
             .order("created_at", desc=True)
             .execute()
         )
@@ -284,6 +284,7 @@ def fetch_dashboard_stats(user_token: str) -> Dict[str, Any]:
 
     distribution: Dict[str, int] = {}
     disagreements = 0
+    disagreement_rows: List[Dict[str, Any]] = []
     for row in screenings:
         classification = row.get("classification") or "Unknown"
         distribution[classification] = distribution.get(classification, 0) + 1
@@ -294,6 +295,7 @@ def fetch_dashboard_stats(user_token: str) -> Dict[str, Any]:
         final_class = _classify(final)
         if det_class != final_class:
             disagreements += 1
+            disagreement_rows.append(row)
 
     open_cases = 0
     try:
@@ -306,6 +308,7 @@ def fetch_dashboard_stats(user_token: str) -> Dict[str, Any]:
         "total_screenings": len(screenings),
         "risk_distribution": distribution,
         "alert_disagreements": disagreements,
+        "disagreement_screenings": disagreement_rows[:10],
         "recent_screenings": screenings[:5],
         "open_cases": open_cases,
     }
