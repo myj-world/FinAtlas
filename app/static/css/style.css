@@ -271,6 +271,19 @@ input:focus, select:focus, textarea:focus {
 
 .btn:hover { opacity: 0.92; }
 .btn:active { transform: translateY(1px); }
+.btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.spinner {
+  display: inline-block;
+  width: 1rem;
+  height: 1rem;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
 
 .btn-primary {
   background: linear-gradient(135deg, var(--primary), var(--primary-dark));
@@ -292,8 +305,20 @@ input:focus, select:focus, textarea:focus {
   text-align: center;
 }
 
+.auth-notice {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  font-size: 0.85rem;
+  color: var(--text);
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  border-radius: var(--radius-sm);
+  text-align: center;
+}
+
 #mfa-qr { text-align: center; margin: 1rem 0; }
-#mfa-qr svg { border-radius: var(--radius); }
+#mfa-qr svg { border-radius: var(--radius); max-width: 240px; height: auto; }
+.qr-wrap { display: inline-block; padding: 0.75rem; background: #fff; border-radius: var(--radius); }
 
 /* Cards & grid */
 .card {

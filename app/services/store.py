@@ -49,7 +49,7 @@ def persist_screening(
 
 
 def persist_batch(
-    user_token: str,
+    user_token: Optional[str],
     total: int,
 ) -> Optional[str]:
     """Create a pending batch job and return its id."""

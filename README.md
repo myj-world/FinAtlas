@@ -41,7 +41,8 @@ FinAtlas is an AI-powered AML platform combining deterministic sanctions list ma
    python -m gunicorn -c gunicorn.conf.py wsgi:application
    ```
 5. Open the dashboard at the served URL (default http://localhost:8000).
-6. Sign in or create an account. Investigator accounts are required to enroll TOTP-based multi-factor authentication.
+6. Sign in or create an account. New accounts receive a confirmation email; clicking the link returns you to the dashboard and prompts for TOTP-based MFA enrolment. Existing users with MFA enabled are asked for their authenticator code at each sign-in.
+   - Ensure your Supabase project does **not** enforce MFA at the project level; FinAtlas enforces AAL2 lazily after sign-in so users can enrol on first access.
 7. Run the unit tests:
    ```bash
    npm test

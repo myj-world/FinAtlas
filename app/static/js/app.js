@@ -1,4 +1,4 @@
-/* FinAtlas frontend SPA */
+/* FinAtlas frontend SPA — Phase 4 (UI, public APIs, Supabase Auth + MFA) */
 
 (function () {
   'use strict';
@@ -10,6 +10,7 @@
   let currentScreening = null;
   let allScreenings = [];
   let allCases = [];
+  let lastProcessedAccessToken = null;
 
   const viewTitles = {
     auth: 'Authentication',
@@ -33,7 +34,11 @@
     }
 
     supabase = window.supabase.createClient(env.supabaseUrl, env.supabaseKey, {
-      auth: { persistSession: true, autoRefreshToken: true }
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+      },
     });
 
     bindAuth();
@@ -42,16 +47,31 @@
     bindModal();
     bindMobileMenu();
 
+    // Handle both redirect-after-confirmation and ordinary sign-ins.
     supabase.auth.onAuthStateChange((event, newSession) => {
-      if (event === 'TOKEN_REFRESHED') session = newSession;
+      if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+        if (newSession) {
+          session = newSession;
+          onSessionReady();
+        }
+      }
+      if (event === 'TOKEN_REFRESHED') {
+        session = newSession || session;
+      }
       if (event === 'SIGNED_OUT') {
         session = null;
         devMode = false;
+        lastProcessedAccessToken = null;
         showAuth();
       }
     });
 
-    supabase.auth.getSession().then(({ data }) => {
+    supabase.auth.getSession().then(({ data, error }) => {
+      if (error) {
+        showToast(error.message, 'error');
+        showAuth();
+        return;
+      }
       session = data.session;
       if (session) {
         onSessionReady();
@@ -86,11 +106,18 @@
     if (name === 'batches') loadBatches();
   }
 
-  function showAuth() {
+  function showAuth(message) {
     el('sidebar')?.classList.add('hidden');
     el('main')?.classList.remove('hidden');
     const skipBtn = el('dev-skip-btn');
     if (skipBtn) skipBtn.classList.toggle('hidden', env.requireAuth);
+    const notice = el('auth-notice');
+    if (notice && message) {
+      notice.textContent = message;
+      notice.classList.remove('hidden');
+    } else if (notice) {
+      notice.classList.add('hidden');
+    }
     showView('auth');
   }
 
@@ -104,8 +131,9 @@
     devMode = true;
     session = null;
     el('user-email').textContent = 'Development mode';
-    el('mfa-badge').classList.add('verified');
-    el('mfa-badge').textContent = 'No auth';
+    const mfaBadge = el('mfa-badge');
+    mfaBadge.classList.add('verified');
+    mfaBadge.textContent = 'No auth';
     showApp();
   }
 
@@ -118,32 +146,61 @@
         tab.classList.add('active');
         el('signin-form')?.classList.toggle('hidden', tab.dataset.tab !== 'signin');
         el('signup-form')?.classList.toggle('hidden', tab.dataset.tab !== 'signup');
+        el('auth-notice')?.classList.add('hidden');
       });
     });
 
     el('signin-form')?.addEventListener('submit', async (e) => {
       e.preventDefault();
+      const btn = e.target.querySelector('button[type="submit"]');
+      setLoading(btn, true);
       const data = new FormData(e.target);
-      const { error } = await supabase.auth.signInWithPassword({
-        email: data.get('email'),
-        password: data.get('password'),
-      });
-      if (error) return showToast(error.message, 'error');
-      const { data: sessionData } = await supabase.auth.getSession();
-      session = sessionData.session;
-      onSessionReady();
+      try {
+        const { error } = await supabase.auth.signInWithPassword({
+          email: data.get('email'),
+          password: data.get('password'),
+        });
+        if (error) {
+          showToast(error.message, 'error');
+          return;
+        }
+        const { data: sessionData } = await supabase.auth.getSession();
+        session = sessionData.session;
+        await onSessionReady();
+      } catch (err) {
+        showToast(err.message || 'Sign in failed', 'error');
+      } finally {
+        setLoading(btn, false);
+      }
     });
 
     el('signup-form')?.addEventListener('submit', async (e) => {
       e.preventDefault();
+      const btn = e.target.querySelector('button[type="submit"]');
+      setLoading(btn, true);
       const data = new FormData(e.target);
-      const { error } = await supabase.auth.signUp({
-        email: data.get('email'),
-        password: data.get('password'),
-      });
-      if (error) return showToast(error.message, 'error');
-      showToast('Account created. Please check your email to confirm, then sign in.', 'success');
-      document.querySelector('[data-tab="signin"]')?.click();
+      try {
+        const { error } = await supabase.auth.signUp({
+          email: data.get('email'),
+          password: data.get('password'),
+          options: {
+            emailRedirectTo: window.location.origin,
+          },
+        });
+        if (error) {
+          showToast(error.message, 'error');
+          return;
+        }
+        showToast(
+          'Account created. Check your inbox and click the confirmation link, then sign in.',
+          'success'
+        );
+        document.querySelector('[data-tab="signin"]')?.click();
+      } catch (err) {
+        showToast(err.message || 'Sign up failed', 'error');
+      } finally {
+        setLoading(btn, false);
+      }
     });
 
     el('sign-out-btn')?.addEventListener('click', async () => {
@@ -164,21 +221,63 @@
       showAuth();
       return;
     }
-    el('user-email').textContent = session.user.email;
+    // Avoid processing the same access token twice (e.g. getSession + onAuthStateChange race).
+    if (session.access_token === lastProcessedAccessToken) return;
+    lastProcessedAccessToken = session.access_token;
 
-    const { data: factorsData, error } = await supabase.auth.mfa.listFactors();
-    if (error) return showToast(error.message, 'error');
+    el('user-email').textContent = session.user.email || 'Investigator';
 
-    const verifiedFactors = (factorsData.totp || []).filter((f) => f.status === 'verified');
-    const aal = decodeAal(session.access_token);
-
-    if (verifiedFactors.length === 0 && env.requireMfa) {
-      await enrollMfa();
-    } else if (aal !== 'aal2' && env.requireMfa) {
-      await challengeMfa(verifiedFactors[0].id);
-    } else {
+    if (!env.requireMfa) {
       await completeSignIn();
+      return;
     }
+
+    const aal = decodeAal(session.access_token);
+    if (aal === 'aal2') {
+      await completeSignIn();
+      return;
+    }
+
+    // AAL1 and MFA is required — either enrol a new factor or challenge an existing one.
+    try {
+      const prepared = await prepareMfaStep();
+      if (prepared.type === 'challenge') {
+        await challengeMfa(prepared.factorId);
+      } else {
+        await enrollMfa();
+      }
+    } catch (err) {
+      showToast(err.message || 'MFA setup failed. Please sign in again.', 'error');
+      await supabase.auth.signOut();
+      session = null;
+      showAuth();
+    }
+  }
+
+  async function prepareMfaStep() {
+    const { data: factorsData, error } = await supabase.auth.mfa.listFactors();
+    if (error) throw error;
+
+    const allTotp = factorsData.totp || [];
+    const verified = allTotp.filter((f) => f.status === 'verified');
+    const unverified = allTotp.filter((f) => f.status === 'unverified');
+
+    if (verified.length > 0) {
+      return { type: 'challenge', factorId: verified[0].id };
+    }
+
+    // Supabase free tier allows only one TOTP factor per user. Remove stale
+    // unverified factors (e.g. from an interrupted enrolment) before enrolling.
+    for (const factor of unverified) {
+      try {
+        await supabase.auth.mfa.unenroll({ factorId: factor.id });
+      } catch (err) {
+        // If unenroll is not permitted, continue and let enrol fail cleanly.
+        console.warn('Could not unenroll stale MFA factor:', err);
+      }
+    }
+
+    return { type: 'enroll' };
   }
 
   async function completeSignIn() {
@@ -216,33 +315,42 @@
 
   async function enrollMfa() {
     const { data, error } = await supabase.auth.mfa.enroll({ factorType: 'totp' });
-    if (error) return showToast(error.message, 'error');
+    if (error) {
+      // If a factor already exists, challenge instead of failing.
+      if (error.message && error.message.toLowerCase().includes('already exists')) {
+        const prepared = await prepareMfaStep();
+        if (prepared.type === 'challenge') {
+          await challengeMfa(prepared.factorId);
+          return;
+        }
+        throw new Error('A stale unverified MFA factor exists. Please sign out and sign in again, or contact an administrator.');
+      }
+      throw error;
+    }
 
     el('mfa-factor-id').value = data.id;
     const qrContainer = el('mfa-qr');
-    if (qrContainer) qrContainer.innerHTML = data.totp.qr_code;
+    if (qrContainer) {
+      qrContainer.innerHTML = `<div class="qr-wrap">${data.totp.qr_code}</div>`;
+    }
     showView('mfa');
   }
 
   async function verifyMfaEnrollment(e) {
     e.preventDefault();
-    const factorId = el('mfa-factor-id').value;
-    const code = el('mfa-code').value;
-
-    const { data: challenge, error: challengeError } = await supabase.auth.mfa.challenge({ factorId });
-    if (challengeError) return showToast(challengeError.message, 'error');
-
-    const { error: verifyError } = await supabase.auth.mfa.verify({
-      factorId,
-      challengeId: challenge.id,
-      code,
-    });
-    if (verifyError) return showToast(verifyError.message, 'error');
-
-    const { data: sessionData } = await supabase.auth.getSession();
-    session = sessionData.session;
-    showToast('MFA enabled successfully', 'success');
-    await onSessionReady();
+    const btn = e.target.querySelector('button[type="submit"]');
+    setLoading(btn, true);
+    try {
+      const factorId = el('mfa-factor-id').value;
+      const code = el('mfa-code').value;
+      await verifyMfaCode(factorId, code);
+      showToast('MFA enabled successfully', 'success');
+      await onSessionReady();
+    } catch (err) {
+      showToast(err.message || 'Invalid MFA code', 'error');
+    } finally {
+      setLoading(btn, false);
+    }
   }
 
   async function challengeMfa(factorId) {
@@ -252,23 +360,33 @@
 
   async function verifyMfaChallenge(e) {
     e.preventDefault();
-    const factorId = el('mfa-challenge-factor-id').value;
-    const code = el('mfa-challenge-code').value;
+    const btn = e.target.querySelector('button[type="submit"]');
+    setLoading(btn, true);
+    try {
+      const factorId = el('mfa-challenge-factor-id').value;
+      const code = el('mfa-challenge-code').value;
+      await verifyMfaCode(factorId, code);
+      showToast('Signed in with MFA', 'success');
+      await onSessionReady();
+    } catch (err) {
+      showToast(err.message || 'Invalid MFA code', 'error');
+    } finally {
+      setLoading(btn, false);
+    }
+  }
 
+  async function verifyMfaCode(factorId, code) {
     const { data: challenge, error: challengeError } = await supabase.auth.mfa.challenge({ factorId });
-    if (challengeError) return showToast(challengeError.message, 'error');
+    if (challengeError) throw challengeError;
 
-    const { error: verifyError } = await supabase.auth.mfa.verify({
+    const { data: verifyData, error: verifyError } = await supabase.auth.mfa.verify({
       factorId,
       challengeId: challenge.id,
       code,
     });
-    if (verifyError) return showToast(verifyError.message, 'error');
+    if (verifyError) throw verifyError;
 
-    const { data: sessionData } = await supabase.auth.getSession();
-    session = sessionData.session;
-    showToast('Signed in with MFA', 'success');
-    await onSessionReady();
+    session = (verifyData && verifyData.session) || (await supabase.auth.getSession()).data.session;
   }
 
   // --- Navigation ----------------------------------------------------------
@@ -308,7 +426,20 @@
     if (!toast) return;
     toast.textContent = message;
     toast.className = `toast ${type} show`;
-    setTimeout(() => toast.classList.remove('show'), 4000);
+    setTimeout(() => toast.classList.remove('show'), 5000);
+  }
+
+  function setLoading(button, isLoading) {
+    if (!button) return;
+    if (isLoading) {
+      button.disabled = true;
+      button.dataset.originalText = button.dataset.originalText || button.innerHTML;
+      button.innerHTML = '<span class="spinner"></span> ' + button.textContent.trim();
+    } else {
+      button.disabled = false;
+      button.innerHTML = button.dataset.originalText || button.innerHTML.replace(/^<span class="spinner"><\/span>\s*/, '');
+      delete button.dataset.originalText;
+    }
   }
 
   // --- Dashboard -----------------------------------------------------------
@@ -565,21 +696,31 @@
     const singleForm = el('single-form');
     singleForm?.addEventListener('submit', async (e) => {
       e.preventDefault();
+      const btn = e.target.querySelector('button[type="submit"]');
+      setLoading(btn, true);
       const resultBox = el('single-result');
       resultBox.classList.remove('hidden');
       resultBox.innerHTML = '<p class="text-muted">Screening...</p>';
-      const payload = formToObject(singleForm);
-      const result = await apiCall('/api/screen/single', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      renderResult(resultBox, result);
+      try {
+        const payload = formToObject(singleForm);
+        const result = await apiCall('/api/screen/single', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        renderResult(resultBox, result);
+      } catch (err) {
+        resultBox.innerHTML = `<pre class="error">${escapeHtml(err.message)}</pre>`;
+      } finally {
+        setLoading(btn, false);
+      }
     });
 
     const batchForm = el('batch-form');
     batchForm?.addEventListener('submit', async (e) => {
       e.preventDefault();
+      const btn = e.target.querySelector('button[type="submit"]');
+      setLoading(btn, true);
       const resultBox = el('batch-result');
       const progress = el('batch-progress');
       const fill = el('batch-progress-fill');
@@ -587,18 +728,24 @@
 
       resultBox.classList.remove('hidden');
       resultBox.innerHTML = '<p class="text-muted">Uploading...</p>';
-      const asyncMode = el('batch-async')?.checked;
-      const formData = new FormData(batchForm);
+      try {
+        const asyncMode = el('batch-async')?.checked;
+        const formData = new FormData(batchForm);
 
-      const result = await apiCall(`/api/screen/batch?async=${asyncMode}`, {
-        method: 'POST',
-        body: formData,
-      });
-      renderResult(resultBox, result);
+        const result = await apiCall(`/api/screen/batch?async=${asyncMode}`, {
+          method: 'POST',
+          body: formData,
+        });
+        renderResult(resultBox, result);
 
-      if (asyncMode && result.batch_id) {
-        progress?.classList.remove('hidden');
-        pollBatch(result.batch_id, progress, fill, text);
+        if (asyncMode && result.batch_id) {
+          progress?.classList.remove('hidden');
+          pollBatch(result.batch_id, progress, fill, text);
+        }
+      } catch (err) {
+        resultBox.innerHTML = `<pre class="error">${escapeHtml(err.message)}</pre>`;
+      } finally {
+        setLoading(btn, false);
       }
     });
 
@@ -608,27 +755,43 @@
     let sampleRecords = [];
 
     loadSample?.addEventListener('click', async () => {
+      const btn = loadSample;
+      setLoading(btn, true);
       sampleResult.classList.remove('hidden');
       sampleResult.innerHTML = 'Loading sample...';
-      const data = await apiCall('/api/import/sample');
-      if (data.error) {
-        sampleResult.textContent = data.error;
-        return;
+      try {
+        const data = await apiCall('/api/import/sample');
+        if (data.error) {
+          sampleResult.innerHTML = `<pre class="error">${escapeHtml(data.error)}</pre>`;
+          return;
+        }
+        sampleRecords = data.records || [];
+        sampleResult.innerHTML = `<p class="text-muted">Loaded ${sampleRecords.length} sample transactions.</p><pre>${escapeHtml(JSON.stringify(sampleRecords, null, 2))}</pre>`;
+        screenSample.disabled = sampleRecords.length === 0;
+      } catch (err) {
+        sampleResult.innerHTML = `<pre class="error">${escapeHtml(err.message)}</pre>`;
+      } finally {
+        setLoading(btn, false);
       }
-      sampleRecords = data.records || [];
-      sampleResult.innerHTML = `<p class="text-muted">Loaded ${sampleRecords.length} sample transactions.</p><pre>${escapeHtml(JSON.stringify(sampleRecords, null, 2))}</pre>`;
-      screenSample.disabled = sampleRecords.length === 0;
     });
 
     screenSample?.addEventListener('click', async () => {
       if (!sampleRecords.length) return;
+      const btn = screenSample;
+      setLoading(btn, true);
       sampleResult.innerHTML = '<p class="text-muted">Screening sample...</p>';
-      const result = await apiCall('/api/screen/batch', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(sampleRecords),
-      });
-      renderResult(sampleResult, result);
+      try {
+        const result = await apiCall('/api/screen/batch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(sampleRecords),
+        });
+        renderResult(sampleResult, result);
+      } catch (err) {
+        sampleResult.innerHTML = `<pre class="error">${escapeHtml(err.message)}</pre>`;
+      } finally {
+        setLoading(btn, false);
+      }
     });
   }
 
@@ -671,15 +834,21 @@
     document.querySelector('.modal-backdrop')?.addEventListener('click', closeModal);
     el('create-case-btn')?.addEventListener('click', async () => {
       if (!currentScreening) return;
-      const res = await apiCall('/api/cases', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ screening_id: currentScreening.id, notes: 'Created from dashboard' }),
-      });
-      if (res.error) showToast(res.error, 'error');
-      else {
-        showToast('Case created', 'success');
-        closeModal();
+      const btn = el('create-case-btn');
+      setLoading(btn, true);
+      try {
+        const res = await apiCall('/api/cases', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ screening_id: currentScreening.id, notes: 'Created from dashboard' }),
+        });
+        if (res.error) showToast(res.error, 'error');
+        else {
+          showToast('Case created', 'success');
+          closeModal();
+        }
+      } finally {
+        setLoading(btn, false);
       }
     });
   }

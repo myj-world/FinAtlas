@@ -35,7 +35,7 @@ def shutdown_batch_worker(wait: bool = True) -> None:
 def submit_batch(
     batch_id: str,
     transactions: List[Dict[str, Any]],
-    user_token: str,
+    user_token: Optional[str],
 ) -> None:
     """Submit a batch screening job to the background worker."""
     executor = get_executor()
@@ -47,7 +47,7 @@ def submit_batch(
 def _run_batch(
     batch_id: str,
     transactions: List[Dict[str, Any]],
-    user_token: str,
+    user_token: Optional[str],
 ) -> None:
     """Screen every transaction and update the batch record in Supabase."""
     client = get_supabase_client(user_token)
