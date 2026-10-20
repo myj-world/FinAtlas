@@ -2,10 +2,11 @@ import os
 
 LARGE_TX_THRESHOLD_USD = 1_000.0
 
-# Cumulative deterministic weights (Gemini decides the unusual-pattern component).
-WEIGHT_SANCTIONS_HIT = 0.50
-WEIGHT_LARGE_TRANSACTION = 0.20
-WEIGHT_HIGH_RISK_JURISDICTION = 0.15
+# Cumulative risk weights; Gemini detects the unusual-pattern component.
+WEIGHT_SANCTIONS_HIT = 0.30
+WEIGHT_LARGE_TRANSACTION = 0.05
+WEIGHT_HIGH_RISK_JURISDICTION = 0.10
+WEIGHT_UNUSUAL_TRANSACTION_PATTERN = 0.55
 
 # Risk classification thresholds.
 THRESHOLD_HIGH = 0.85

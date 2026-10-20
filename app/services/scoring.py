@@ -9,8 +9,9 @@ from app.config import (
     WEIGHT_HIGH_RISK_JURISDICTION,
     WEIGHT_LARGE_TRANSACTION,
     WEIGHT_SANCTIONS_HIT,
+    WEIGHT_UNUSUAL_TRANSACTION_PATTERN,
 )
-from app.services.gemini import GeminiError, get_gemini_client
+from app.services.gemini import get_gemini_client
 from app.services.sanctions import sanctions_repo
 from app.services.store import persist_screening
 
@@ -31,20 +32,26 @@ def screen_transaction(transaction: dict, user_token: Optional[str] = None) -> D
         score = _add_rule(rules, score, "high_risk_jurisdiction", WEIGHT_HIGH_RISK_JURISDICTION)
 
     deterministic_score = round(min(score, 1.0), 3)
-    gemini_result = None
-    final_score = deterministic_score
+    gemini_result = get_gemini_client().review(tx, deterministic_score, rules, hits)
+    final_score = score
 
-    # Gemini reviews any transaction that matched at least one deterministic rule.
-    if rules:
-        gemini_result = get_gemini_client().review(tx, deterministic_score, rules, hits)
-        final_score = round(float(gemini_result["updated_risk_score"]), 3)
+    if gemini_result["unusual_pattern_detected"]:
+        final_score = _add_rule(
+            rules,
+            final_score,
+            "unusual_transaction_pattern",
+            WEIGHT_UNUSUAL_TRANSACTION_PATTERN,
+        )
+
+    final_score = round(min(final_score, 1.0), 3)
+    gemini_result["updated_risk_score"] = final_score
 
     classification = classify_score(final_score)
 
     result = {
         "transaction_id": tx.get("transactionId"),
         "deterministic_score": deterministic_score,
-        "gemini_reviewed": rules is not None and bool(rules),
+        "gemini_reviewed": True,
         "gemini_result": gemini_result,
         "final_score": final_score,
         "classification": classification,

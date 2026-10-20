@@ -8,8 +8,8 @@ FinAtlas is an AI-powered AML platform combining deterministic sanctions list ma
 
 - **Multi-Format Ingestion:** Process bulk CSV uploads, pre-loaded sample data, or single-transaction manual entry.
 - **Sanctions Screening:** Direct matching against UNSC, EU, and OFAC consolidated lists.
-- **Rule-Based Scoring:** Heuristic risk scoring based on transaction amounts, high-risk jurisdictions, and execution patterns.
-- **Gemini AI Verification:** Contextual analysis to verify potential false positives and assign calibrated risk scores ($0.0 - 1.0$).
+- **Rule-Based Scoring:** Weighted risk scoring for direct sanctions matches, large transactions, and high-risk jurisdictions.
+- **Gemini AI Analysis:** Reviews every transaction for unusual patterns, regardless of deterministic rule matches; detected patterns add to the weighted score.
 - **REST APIs:** Developer-friendly endpoints for single (`/api/screen/single`) and batch (`/api/screen/batch`) screening, plus optional async background batch processing.
 - **Risk Dashboard & Case Management:** Interactive investigator reports with risk distributions, alert disagreements, Gemini explanations, and persistent per-user case tracking via Supabase.
 
@@ -54,10 +54,10 @@ FinAtlas is an AI-powered AML platform combining deterministic sanctions list ma
 
 - Flask application factory and Gunicorn WSGI entrypoint (`wsgi.py`).
 - Exact/normalised deterministic sanctions matching against local `unsc.xml`, `eu.xml` and `ofac.xml`, including entity IDs and aliases.
-- Deterministic rule scoring (direct sanctions hit, large transaction >$1,000 USD, high-risk jurisdiction), cumulative and capped at `1.0`.
+- Weighted risk scoring, cumulative and capped at `1.0`: direct sanctions match `+0.30`, transaction above `$1,000 USD` equivalent `+0.05`, high-risk sender/receiver jurisdiction `+0.10`, and AI-detected unusual transaction pattern `+0.55`.
 - Gemini REST client with bounded retries, structured JSON output validation, and explicit failure handling.
-- Gemini score refinement: the deterministic score plus context is sent to Gemini, which returns the final score, confidence, reasoning and a false-positive assessment.
-- Risk classification thresholds: `>0.85` High, `0.50–0.85` Medium, `<0.50` Low.
+- Every transaction is sent to Gemini, including transactions with no deterministic matches. Gemini returns whether an unusual pattern was detected, confidence, reasoning, and a false-positive assessment; the backend applies the `+0.55` pattern weight when detected.
+- Risk classification thresholds: `>0.85` High, `0.50–0.85` Medium, `<0.50` Low. For example, the four listed weights sum to `1.0` when all apply.
 - `/api/screen/single` and `/api/screen/batch` endpoints.
 - Unit tests for sanctions matching, scoring and Gemini integration (Gemini mocked).
 - Minimal HTML/CSS/JS dashboard for manual and CSV screening.

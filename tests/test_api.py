@@ -10,7 +10,11 @@ def _patch_gemini(monkeypatch, result=None, raise_on_call=None):
         def review(self, *args, **kwargs):
             if raise_on_call:
                 raise raise_on_call
-            return result
+            return {
+                "updated_risk_score": 0.0,
+                "unusual_pattern_detected": False,
+                **(result or {}),
+            }
 
     monkeypatch.setattr("app.services.scoring.get_gemini_client", lambda: Client())
 
@@ -53,7 +57,13 @@ class TestSingleScreenEndpoint:
         assert data["classification"] == "No Match / Low Risk"
 
     def test_screen_high_risk(self, client, monkeypatch):
-        _patch_gemini(monkeypatch, result={"updated_risk_score": 0.95})
+        _patch_gemini(
+            monkeypatch,
+            result={
+                "updated_risk_score": 1.0,
+                "unusual_pattern_detected": True,
+            },
+        )
         payload = {
             "transactionId": "TX-API-2",
             "amount": 5000.0,
@@ -66,7 +76,7 @@ class TestSingleScreenEndpoint:
         response = client.post("/api/screen/single", json=payload)
         assert response.status_code == 200
         data = response.get_json()
-        assert data["final_score"] == 0.95
+        assert data["final_score"] == 1.0
         assert data["classification"] == "Definite Match / High Risk"
         assert data["gemini_reviewed"] is True
 

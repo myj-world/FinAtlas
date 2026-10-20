@@ -15,6 +15,7 @@ class TestParseGeminiResponse:
         text = json.dumps(
             {
                 "updated_risk_score": 0.75,
+                "unusual_pattern_detected": True,
                 "confidence": 0.9,
                 "reasoning": "Sanctions hit with weak context.",
                 "false_positive_assessment": "Possible false positive.",
@@ -24,6 +25,7 @@ class TestParseGeminiResponse:
         result = _parse_gemini_response(payload)
 
         assert result["updated_risk_score"] == 0.75
+        assert result["unusual_pattern_detected"] is True
         assert result["confidence"] == 0.9
         assert result["reasoning"] == "Sanctions hit with weak context."
         assert result["false_positive_assessment"] == "Possible false positive."
@@ -41,6 +43,20 @@ class TestParseGeminiResponse:
         with pytest.raises(GeminiError):
             _parse_gemini_response(payload)
 
+    def test_non_boolean_unusual_pattern_raises(self):
+        text = json.dumps(
+            {
+                "updated_risk_score": 0.2,
+                "unusual_pattern_detected": "false",
+                "confidence": 0.5,
+                "reasoning": "No unusual pattern.",
+                "false_positive_assessment": "Not applicable.",
+            }
+        )
+        payload = {"candidates": [{"content": {"parts": [{"text": text}]}}]}
+        with pytest.raises(GeminiError, match="non-boolean"):
+            _parse_gemini_response(payload)
+
     def test_missing_keys_raises(self):
         text = json.dumps({"updated_risk_score": 0.5, "confidence": 0.5})
         payload = {"candidates": [{"content": {"parts": [{"text": text}]}}]}
@@ -52,6 +68,7 @@ class TestParseGeminiResponse:
         text = json.dumps(
             {
                 "updated_risk_score": score,
+                "unusual_pattern_detected": False,
                 "confidence": 0.5,
                 "reasoning": "x",
                 "false_positive_assessment": "y",
@@ -78,6 +95,7 @@ class TestGeminiClient:
                                 "text": json.dumps(
                                     {
                                         "updated_risk_score": 0.65,
+                                        "unusual_pattern_detected": False,
                                         "confidence": 0.8,
                                         "reasoning": "Medium risk.",
                                         "false_positive_assessment": "Unlikely.",

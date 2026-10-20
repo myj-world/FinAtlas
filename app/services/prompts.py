@@ -1,15 +1,23 @@
-PROMPT_VERSION = "v1"
+PROMPT_VERSION = "v2"
 
 SCREENING_PROMPT_TEMPLATE = """You are an AI assistant supporting an anti-money laundering (AML) investigation.
 Analyze the transaction below and return a JSON object with exactly these keys:
 - updated_risk_score: a number between 0.0 and 1.0
+- unusual_pattern_detected: a boolean indicating whether the supplied transaction data shows an unusual pattern
 - confidence: a number between 0.0 and 1.0
 - reasoning: a concise explanation of the risk factors and any mitigating context
 - false_positive_assessment: an evaluation of whether the name match is likely a false positive
 
-The deterministic rule engine has already evaluated this transaction. Use that score as a baseline.
-Add or refine risk based on context, unusual patterns, misspellings, multilingual name variants, and sanctions-list semantics.
-Do not invent facts that are not supported by the input. Frame all conclusions as investigative indicators, not legal findings.
+The deterministic rule engine has already evaluated this transaction. Use its score as the baseline.
+Apply these exact cumulative weights, capped at 1.0:
+- Direct sanctions match: +0.30
+- Large transaction above $1,000 USD equivalent: +0.05
+- High-risk sender or receiver jurisdiction: +0.10
+- Unusual transaction pattern detected by you: +0.55
+Set unusual_pattern_detected to true only when the supplied transaction data supports an unusual pattern.
+The updated_risk_score must equal the deterministic score plus the applicable weights, capped at 1.0.
+Review every transaction, including those with no deterministic rules matched.
+Do not invent facts or imply transaction history that was not provided. Frame conclusions as investigative indicators, not legal findings.
 
 Prompt version: {version}
 

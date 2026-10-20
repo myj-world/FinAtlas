@@ -70,10 +70,20 @@ def _parse_gemini_response(payload: dict) -> Dict[str, Any]:
     except (KeyError, IndexError, json.JSONDecodeError) as exc:
         raise GeminiError(f"Gemini returned unparseable output: {exc}")
 
-    required_keys = {"updated_risk_score", "confidence", "reasoning", "false_positive_assessment"}
+    required_keys = {
+        "updated_risk_score",
+        "unusual_pattern_detected",
+        "confidence",
+        "reasoning",
+        "false_positive_assessment",
+    }
     missing = required_keys - set(parsed.keys())
     if missing:
         raise GeminiError(f"Gemini response missing keys: {missing}")
+
+    unusual_pattern_detected = parsed["unusual_pattern_detected"]
+    if not isinstance(unusual_pattern_detected, bool):
+        raise GeminiError("Gemini returned a non-boolean unusual_pattern_detected")
 
     score = float(parsed["updated_risk_score"])
     confidence = float(parsed["confidence"])
@@ -82,6 +92,7 @@ def _parse_gemini_response(payload: dict) -> Dict[str, Any]:
 
     return {
         "updated_risk_score": round(score, 3),
+        "unusual_pattern_detected": unusual_pattern_detected,
         "confidence": round(confidence, 3),
         "reasoning": str(parsed["reasoning"]),
         "false_positive_assessment": str(parsed["false_positive_assessment"]),

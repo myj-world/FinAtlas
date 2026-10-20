@@ -22,10 +22,16 @@ def _make_tx(**overrides):
 
 class MockGeminiClient:
     def __init__(self, result=None, raise_on_call=None):
-        self.result = result
+        self.result = {
+            "updated_risk_score": 0.0,
+            "unusual_pattern_detected": False,
+            **(result or {}),
+        }
         self.raise_on_call = raise_on_call
+        self.calls = []
 
     def review(self, transaction, deterministic_score, rules, hits):
+        self.calls.append((transaction, deterministic_score, rules, hits))
         if self.raise_on_call:
             raise self.raise_on_call
         return self.result
@@ -42,7 +48,7 @@ def mock_gemini(monkeypatch):
 
 
 class TestDeterministicScoring:
-    def test_no_rules_no_gemini_call(self, mock_gemini):
+    def test_no_rules_still_calls_gemini(self, mock_gemini):
         patched = mock_gemini(result={"updated_risk_score": 0.99})
         tx = _make_tx()
         result = screen_transaction(tx)
@@ -50,46 +56,49 @@ class TestDeterministicScoring:
         assert result["deterministic_score"] == 0.0
         assert result["final_score"] == 0.0
         assert result["classification"] == "No Match / Low Risk"
-        assert result["gemini_reviewed"] is False
-        assert result["gemini_result"] is None
+        assert result["gemini_reviewed"] is True
+        assert len(patched.calls) == 1
+        assert result["gemini_result"]["updated_risk_score"] == 0.0
         assert result["sanctions_hits"] == []
         assert result["rules"] == []
 
     def test_large_transaction_only(self, mock_gemini):
-        mock_gemini(result={"updated_risk_score": 0.2})
+        mock_gemini(result={"updated_risk_score": 0.05})
         tx = _make_tx(amount=1500.0)
         result = screen_transaction(tx)
 
-        assert result["deterministic_score"] == 0.2
-        assert result["final_score"] == 0.2
+        assert result["deterministic_score"] == 0.05
+        assert result["final_score"] == 0.05
         assert result["classification"] == "No Match / Low Risk"
         assert result["gemini_reviewed"] is True
         assert any(rule["rule"] == "large_transaction" for rule in result["rules"])
 
     def test_high_risk_jurisdiction_only(self, mock_gemini):
-        mock_gemini(result={"updated_risk_score": 0.15})
+        mock_gemini(result={"updated_risk_score": 0.1})
         tx = _make_tx(receiverCountry="IR")
         result = screen_transaction(tx)
 
-        assert result["deterministic_score"] == 0.15
-        assert result["final_score"] == 0.15
+        assert result["deterministic_score"] == 0.1
+        assert result["final_score"] == 0.1
         assert result["classification"] == "No Match / Low Risk"
         assert any(rule["rule"] == "high_risk_jurisdiction" for rule in result["rules"])
 
     def test_sanctions_hit_only(self, mock_gemini):
-        mock_gemini(result={"updated_risk_score": 0.5})
+        mock_gemini(result={"updated_risk_score": 0.3})
         tx = _make_tx(receiverName="Kim Jong Un")
         result = screen_transaction(tx)
 
-        assert result["deterministic_score"] == 0.5
-        assert result["final_score"] == 0.5
-        assert result["classification"] == "Potential Match / Medium Risk"
+        assert result["deterministic_score"] == 0.3
+        assert result["final_score"] == 0.3
+        assert result["classification"] == "No Match / Low Risk"
         assert result["gemini_reviewed"] is True
         assert len(result["sanctions_hits"]) == 1
         assert result["sanctions_hits"][0]["list"] == "UNSC"
 
     def test_all_rules_capped_at_one(self, mock_gemini):
-        mock_gemini(result={"updated_risk_score": 1.0})
+        mock_gemini(
+            result={"updated_risk_score": 1.0, "unusual_pattern_detected": True}
+        )
         tx = _make_tx(
             amount=1500.0,
             receiverCountry="IR",
@@ -97,37 +106,64 @@ class TestDeterministicScoring:
         )
         result = screen_transaction(tx)
 
-        # With the current weights the deterministic ceiling is 0.85;
-        # the cap protects against future weight changes.
-        assert result["deterministic_score"] == 0.85
+        assert result["deterministic_score"] == 0.45
         assert result["final_score"] == 1.0
         assert result["classification"] == "Definite Match / High Risk"
         rules = {rule["rule"] for rule in result["rules"]}
-        assert rules == {"sanctions_hit", "large_transaction", "high_risk_jurisdiction"}
+        assert rules == {
+            "sanctions_hit",
+            "large_transaction",
+            "high_risk_jurisdiction",
+            "unusual_transaction_pattern",
+        }
+
+    def test_unusual_pattern_adds_ai_weight(self, mock_gemini):
+        mock_gemini(
+            result={
+                "updated_risk_score": 0.55,
+                "unusual_pattern_detected": True,
+            }
+        )
+        result = screen_transaction(_make_tx())
+
+        assert result["deterministic_score"] == 0.0
+        assert result["final_score"] == 0.55
+        assert result["rules"] == [
+            {
+                "rule": "unusual_transaction_pattern",
+                "weight": 0.55,
+                "cumulative_score": 0.55,
+            }
+        ]
 
 
 class TestGeminiRefinement:
     def test_gemini_refines_score_upwards(self, mock_gemini):
-        mock_gemini(result={"updated_risk_score": 0.92})
+        mock_gemini(
+            result={
+                "updated_risk_score": 0.85,
+                "unusual_pattern_detected": True,
+            }
+        )
         tx = _make_tx(receiverName="Kim Jong Un")
         result = screen_transaction(tx)
 
-        assert result["deterministic_score"] == 0.5
-        assert result["final_score"] == 0.92
-        assert result["classification"] == "Definite Match / High Risk"
+        assert result["deterministic_score"] == 0.3
+        assert result["final_score"] == 0.85
+        assert result["classification"] == "Potential Match / Medium Risk"
 
     def test_gemini_refines_score_downwards(self, mock_gemini):
         mock_gemini(result={"updated_risk_score": 0.3})
         tx = _make_tx(receiverName="Kim Jong Un")
         result = screen_transaction(tx)
 
-        assert result["deterministic_score"] == 0.5
+        assert result["deterministic_score"] == 0.3
         assert result["final_score"] == 0.3
         assert result["classification"] == "No Match / Low Risk"
 
     def test_gemini_failure_raises_error(self, mock_gemini):
         mock_gemini(raise_on_call=GeminiError("Gemini unavailable"))
-        tx = _make_tx(amount=1500.0)
+        tx = _make_tx()
 
         with pytest.raises(GeminiError):
             screen_transaction(tx)

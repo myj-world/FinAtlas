@@ -35,14 +35,14 @@ First-line deterministic matching against global sanctions lists:
 
 Initial cumulative risk score calculation (normalized to 1.0):
 
-* **Direct Sanctions Match:** +0.50
-* **Large Transaction (>$1,000 USD equivalent):** +0.20
-* **High-Risk Jurisdiction (Sender/Receiver Country):** +0.15
-* **Unusual Transaction Pattern:** +0.15
+* **Direct Sanctions Match:** +0.30
+* **Large Transaction (>$1,000 USD equivalent):** +0.05
+* **High-Risk Jurisdiction (Sender/Receiver Country):** +0.10
+* **Unusual Transaction Pattern (AI Detection):** +0.55
 
 ### Step 3: Gemini AI Verification & Contextual Analysis
 
-Transactions are sent via **Gemini REST API** to verify potential false positives, evaluate context, and produce a final normalized risk score ($0.0 - 1.0$).
+Every transaction is sent via **Gemini REST API**, whether or not deterministic rules matched. Gemini evaluates the supplied transaction for an unusual pattern and returns its finding, confidence, reasoning, and false-positive assessment. The backend applies the AI pattern weight when Gemini detects one, adds it to the deterministic score, and caps the final normalized score at 1.0. Gemini must not infer transaction history or facts absent from the input.
 
 ### Risk Classification Thresholds
 

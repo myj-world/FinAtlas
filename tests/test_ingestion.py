@@ -15,7 +15,11 @@ def _patch_gemini(monkeypatch, result=None, raise_on_call=None):
         def review(self, *args, **kwargs):
             if raise_on_call:
                 raise raise_on_call
-            return result
+            return {
+                "updated_risk_score": 0.0,
+                "unusual_pattern_detected": False,
+                **(result or {}),
+            }
 
     monkeypatch.setattr("app.services.scoring.get_gemini_client", lambda: Client())
 
