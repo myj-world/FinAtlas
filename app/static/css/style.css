@@ -699,6 +699,10 @@ input:focus, select:focus, textarea:focus {
   z-index: 30;
 }
 
+.main.auth-mode .topbar {
+  display: none;
+}
+
 /* Loading shimmer for async states */
 @keyframes shimmer {
   0% { background-position: -200% 0; }
