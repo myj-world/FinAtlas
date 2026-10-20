@@ -110,6 +110,7 @@ function showView(viewName) {
     auth: 'Sign in',
     mfa: 'MFA Setup',
     'mfa-challenge': 'MFA Challenge',
+    'mfa-error': 'MFA Setup',
   };
   const titleEl = el('page-title');
   if (titleEl) titleEl.textContent = titles[viewName] || 'FinAtlas';
@@ -128,6 +129,16 @@ function showAuth() {
     main.classList.add('auth-mode');
   }
   showView('auth');
+}
+
+function showAuthFlowView(viewName) {
+  showElement('sidebar', false);
+  const main = el('main');
+  if (main) {
+    main.classList.remove('hidden');
+    main.classList.add('auth-mode');
+  }
+  showView(viewName);
 }
 
 function showApp() {
@@ -178,11 +189,21 @@ async function onSessionReady() {
     }
   } catch (err) {
     console.error('MFA flow failed:', err);
-    showToast(err.message || 'MFA setup failed. Please sign in again.', 'error');
-    await supabaseClient.auth.signOut();
-    session = null;
-    showAuth();
+    lastProcessedAccessToken = null;
+    showMfaError(err);
   }
+}
+
+function showMfaError(error) {
+  const message = error?.message || 'MFA setup failed. Please try again.';
+  const errorMessage = el('mfa-error-message');
+  if (errorMessage) errorMessage.textContent = message;
+  showAuthFlowView('mfa-error');
+}
+
+async function retryMfaSetup() {
+  lastProcessedAccessToken = null;
+  await onSessionReady();
 }
 
 function updateMfaBadge(verified) {
@@ -198,12 +219,15 @@ async function cleanupStaleMfaFactors() {
 
   const unverified = (data?.totp || []).filter((f) => f.status === 'unverified');
   for (const factor of unverified) {
-    try {
-      await supabaseClient.auth.mfa.unenroll({ factorId: factor.id });
-      console.info('Removed stale unverified MFA factor:', factor.id);
-    } catch (err) {
-      console.warn('Could not remove stale MFA factor:', factor.id, err);
+    const { error: unenrollError } = await supabaseClient.auth.mfa.unenroll({
+      factorId: factor.id,
+    });
+    if (unenrollError) {
+      throw new Error(
+        `Could not remove the unfinished MFA setup (${unenrollError.message}). Retry MFA setup or sign out and contact support.`
+      );
     }
+    console.info('Removed stale unverified MFA factor:', factor.id);
   }
 }
 
@@ -232,35 +256,28 @@ async function prepareMfaStep() {
 }
 
 async function enrollMfa() {
-  try {
-    const { data, error } = await supabaseClient.auth.mfa.enroll({ factorType: 'totp' });
-    if (error) {
-      const msg = (error.message || '').toLowerCase();
-      if (msg.includes('already exists') || msg.includes('unverified') || msg.includes('factor')) {
-        await cleanupStaleMfaFactors();
-        const prepared = await prepareMfaStep();
-        if (prepared.type === 'challenge') {
-          await challengeMfa(prepared.factorId);
-          return;
-        }
-        const retry = await supabaseClient.auth.mfa.enroll({ factorType: 'totp' });
-        if (retry.error) throw retry.error;
-        renderMfaQr(retry.data);
-        return;
-      }
-      throw error;
+  let { data, error } = await supabaseClient.auth.mfa.enroll({ factorType: 'totp' });
+  if (error && isExistingMfaFactorError(error)) {
+    await cleanupStaleMfaFactors();
+    const prepared = await prepareMfaStep();
+    if (prepared.type === 'challenge') {
+      await challengeMfa(prepared.factorId);
+      return;
     }
-    renderMfaQr(data);
-  } catch (err) {
-    const msg = err?.message || 'Failed to set up MFA.';
-    console.error('MFA enroll failed:', err);
-    if (msg.toLowerCase().includes('already exists') || msg.toLowerCase().includes('unverified')) {
-      throw new Error(
-        'Your MFA setup is stale. Please sign out, sign back in, and try again.'
-      );
-    }
-    throw err;
+    ({ data, error } = await supabaseClient.auth.mfa.enroll({ factorType: 'totp' }));
   }
+  if (error) throw error;
+  renderMfaQr(data);
+}
+
+function isExistingMfaFactorError(error) {
+  const message = (error?.message || '').toLowerCase();
+  return (
+    message.includes('already exists') ||
+    message.includes('unverified') ||
+    /factor.{0,30}(exists|already)/.test(message) ||
+    /already.{0,30}factor/.test(message)
+  );
 }
 
 function renderMfaQr(data) {
@@ -269,12 +286,12 @@ function renderMfaQr(data) {
   if (qrContainer && data.totp?.qr_code) {
     qrContainer.innerHTML = `<div class="qr-wrap">${data.totp.qr_code}</div>`;
   }
-  showView('mfa');
+  showAuthFlowView('mfa');
 }
 
 async function challengeMfa(factorId) {
   el('mfa-challenge-factor-id').value = factorId;
-  showView('mfa-challenge');
+  showAuthFlowView('mfa-challenge');
 }
 
 async function verifyMfaEnrollment(event) {
@@ -998,6 +1015,8 @@ function setupAuthForms() {
   el('mfa-challenge-form')?.addEventListener('submit', verifyMfaChallenge);
   el('sign-out-btn')?.addEventListener('click', handleSignOut);
   el('dev-skip-btn')?.addEventListener('click', devSkipAuth);
+  el('mfa-retry-btn')?.addEventListener('click', retryMfaSetup);
+  el('mfa-error-sign-out-btn')?.addEventListener('click', handleSignOut);
 
   qsa('.tab').forEach((tab) => {
     tab.addEventListener('click', () => switchTab(tab.dataset.tab));
@@ -1020,6 +1039,20 @@ function setupScreeningForms() {
 
 async function handleAuthRedirect() {
   const params = new URLSearchParams(window.location.search);
+  const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+  const errorDescription =
+    params.get('error_description') || hashParams.get('error_description');
+  if (errorDescription) {
+    showAuth();
+    const notice = el('auth-notice');
+    if (notice) {
+      notice.textContent = `Email confirmation failed: ${errorDescription}`;
+      notice.classList.remove('hidden');
+    }
+    window.history.replaceState({}, document.title, window.location.pathname);
+    return true;
+  }
+
   const code = params.get('code');
   if (code && supabaseClient) {
     try {
@@ -1028,10 +1061,16 @@ async function handleAuthRedirect() {
       session = data.session;
       window.history.replaceState({}, document.title, window.location.pathname);
       await onSessionReady();
-      return true;
     } catch (err) {
-      console.warn('Could not exchange code for session:', err);
+      console.error('Could not complete email confirmation:', err);
+      showAuth();
+      const notice = el('auth-notice');
+      if (notice) {
+        notice.textContent = err.message || 'Email confirmation could not be completed. Request a new confirmation email and try again.';
+        notice.classList.remove('hidden');
+      }
     }
+    return true;
   }
   return false;
 }
@@ -1067,7 +1106,13 @@ async function bootstrap() {
   supabaseClient.auth.onAuthStateChange((_event, newSession) => {
     session = newSession;
     if (newSession) {
-      onSessionReady();
+      // Defer Supabase Auth calls until its auth-state callback has returned.
+      window.setTimeout(() => {
+        onSessionReady().catch((error) => {
+          console.error('Auth state handling failed:', error);
+          showMfaError(error);
+        });
+      }, 0);
     } else {
       lastProcessedAccessToken = null;
       showAuth();

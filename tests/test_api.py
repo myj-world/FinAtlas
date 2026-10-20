@@ -34,6 +34,8 @@ class TestHomePage:
         assert response.status_code == 200
         assert b'id="startup-view"' in response.data
         assert b'id="startup-retry"' in response.data
+        assert b'id="mfa-error-view"' in response.data
+        assert b'id="mfa-retry-btn"' in response.data
         assert b'<script defer src="https://cdn.jsdelivr.net/npm/@supabase' in response.data
 
 

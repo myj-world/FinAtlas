@@ -139,6 +139,19 @@
         </div>
       </section>
 
+      <section id="mfa-error-view" class="view hidden">
+        <div class="auth-card">
+          <h2>MFA setup needs attention</h2>
+          <p id="mfa-error-message" class="auth-notice">
+            MFA could not be started. Retry setup or sign out and try again.
+          </p>
+          <div class="actions">
+            <button id="mfa-retry-btn" class="btn btn-primary">Retry MFA setup</button>
+            <button id="mfa-error-sign-out-btn" class="btn btn-ghost">Sign out</button>
+          </div>
+        </div>
+      </section>
+
       <!-- Dashboard -->
       <section id="dashboard-view" class="view hidden">
         <div class="kpi-grid">
