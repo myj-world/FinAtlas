@@ -6,7 +6,7 @@
   <title>FinAtlas — AI AML Screening</title>
   <link rel="icon" type="image/png" href="/icon.png">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.109.0/dist/umd/supabase.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.109.0/dist/umd/supabase.min.js"></script>
   <script>
     window.__ENV__ = {
       supabaseUrl: {{ supabase_url | tojson }},
@@ -18,6 +18,14 @@
 </head>
 <body>
   <div id="app">
+    <section id="startup-view" class="startup-view" role="status" aria-live="polite">
+      <div class="startup-card">
+        <div class="startup-spinner" aria-hidden="true"></div>
+        <h1>FinAtlas</h1>
+        <p id="startup-message">Loading your workspace...</p>
+        <a class="startup-retry" id="startup-retry" href="/">Reload FinAtlas</a>
+      </div>
+    </section>
     <aside id="sidebar" class="sidebar hidden">
       <div class="brand">
         <img id="brand-logo" src="/icon.png" alt="FinAtlas" class="brand-icon" onerror="this.style.display='none'; document.getElementById('brand-fallback').classList.remove('hidden')">

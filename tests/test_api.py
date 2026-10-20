@@ -24,6 +24,15 @@ class TestHealthEndpoint:
         assert "environment" in data
 
 
+class TestHomePage:
+    def test_homepage_includes_startup_fallback(self, client):
+        response = client.get("/")
+        assert response.status_code == 200
+        assert b'id="startup-view"' in response.data
+        assert b'id="startup-retry"' in response.data
+        assert b'<script defer src="https://cdn.jsdelivr.net/npm/@supabase' in response.data
+
+
 class TestSingleScreenEndpoint:
     def test_screen_low_risk(self, client, monkeypatch):
         _patch_gemini(monkeypatch, result={"updated_risk_score": 0.0})

@@ -3,7 +3,7 @@
  */
 
 const env = window.__ENV__ || {};
-let supabase = null;
+let supabaseClient = null;
 let session = null;
 let lastProcessedAccessToken = null;
 let currentScreeningId = null;
@@ -179,7 +179,7 @@ async function onSessionReady() {
   } catch (err) {
     console.error('MFA flow failed:', err);
     showToast(err.message || 'MFA setup failed. Please sign in again.', 'error');
-    await supabase.auth.signOut();
+    await supabaseClient.auth.signOut();
     session = null;
     showAuth();
   }
@@ -193,13 +193,13 @@ function updateMfaBadge(verified) {
 }
 
 async function cleanupStaleMfaFactors() {
-  const { data, error } = await supabase.auth.mfa.listFactors();
+  const { data, error } = await supabaseClient.auth.mfa.listFactors();
   if (error) throw error;
 
   const unverified = (data?.totp || []).filter((f) => f.status === 'unverified');
   for (const factor of unverified) {
     try {
-      await supabase.auth.mfa.unenroll({ factorId: factor.id });
+      await supabaseClient.auth.mfa.unenroll({ factorId: factor.id });
       console.info('Removed stale unverified MFA factor:', factor.id);
     } catch (err) {
       console.warn('Could not remove stale MFA factor:', factor.id, err);
@@ -208,7 +208,7 @@ async function cleanupStaleMfaFactors() {
 }
 
 async function prepareMfaStep() {
-  const { data: factorsData, error } = await supabase.auth.mfa.listFactors();
+  const { data: factorsData, error } = await supabaseClient.auth.mfa.listFactors();
   if (error) throw error;
 
   const allTotp = factorsData.totp || [];
@@ -220,7 +220,7 @@ async function prepareMfaStep() {
 
   await cleanupStaleMfaFactors();
 
-  const { data: refreshedFactors, error: refreshedError } = await supabase.auth.mfa.listFactors();
+  const { data: refreshedFactors, error: refreshedError } = await supabaseClient.auth.mfa.listFactors();
   if (refreshedError) throw refreshedError;
 
   const remainingVerified = (refreshedFactors?.totp || []).filter((f) => f.status === 'verified');
@@ -233,7 +233,7 @@ async function prepareMfaStep() {
 
 async function enrollMfa() {
   try {
-    const { data, error } = await supabase.auth.mfa.enroll({ factorType: 'totp' });
+    const { data, error } = await supabaseClient.auth.mfa.enroll({ factorType: 'totp' });
     if (error) {
       const msg = (error.message || '').toLowerCase();
       if (msg.includes('already exists') || msg.includes('unverified') || msg.includes('factor')) {
@@ -243,7 +243,7 @@ async function enrollMfa() {
           await challengeMfa(prepared.factorId);
           return;
         }
-        const retry = await supabase.auth.mfa.enroll({ factorType: 'totp' });
+        const retry = await supabaseClient.auth.mfa.enroll({ factorType: 'totp' });
         if (retry.error) throw retry.error;
         renderMfaQr(retry.data);
         return;
@@ -285,7 +285,7 @@ async function verifyMfaEnrollment(event) {
   try {
     const factorId = el('mfa-factor-id').value;
     const code = el('mfa-code').value.trim();
-    const { data, error } = await supabase.auth.mfa.challengeAndVerify({
+    const { data, error } = await supabaseClient.auth.mfa.challengeAndVerify({
       factorId,
       code,
     });
@@ -309,12 +309,12 @@ async function verifyMfaChallenge(event) {
   try {
     const factorId = el('mfa-challenge-factor-id').value;
     const code = el('mfa-challenge-code').value.trim();
-    const { data: challenge, error: challengeError } = await supabase.auth.mfa.challenge({
+    const { data: challenge, error: challengeError } = await supabaseClient.auth.mfa.challenge({
       factorId,
     });
     if (challengeError) throw challengeError;
 
-    const { data, error } = await supabase.auth.mfa.verify({
+    const { data, error } = await supabaseClient.auth.mfa.verify({
       factorId,
       challengeId: challenge.id,
       code,
@@ -340,7 +340,7 @@ async function handleSignIn(event) {
   try {
     const email = form.email.value.trim();
     const password = form.password.value;
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
     if (error) throw error;
 
     session = data.session;
@@ -362,7 +362,7 @@ async function handleSignUp(event) {
   try {
     const email = form.email.value.trim();
     const password = form.password.value;
-    const { data, error } = await supabase.auth.signUp({
+    const { data, error } = await supabaseClient.auth.signUp({
       email,
       password,
       options: {
@@ -390,7 +390,7 @@ async function handleSignUp(event) {
 }
 
 async function handleSignOut() {
-  await supabase.auth.signOut();
+  await supabaseClient.auth.signOut();
   session = null;
   lastProcessedAccessToken = null;
   showAuth();
@@ -1021,9 +1021,9 @@ function setupScreeningForms() {
 async function handleAuthRedirect() {
   const params = new URLSearchParams(window.location.search);
   const code = params.get('code');
-  if (code && supabase) {
+  if (code && supabaseClient) {
     try {
-      const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+      const { data, error } = await supabaseClient.auth.exchangeCodeForSession(code);
       if (error) throw error;
       session = data.session;
       window.history.replaceState({}, document.title, window.location.pathname);
@@ -1037,7 +1037,7 @@ async function handleAuthRedirect() {
 }
 
 async function bootstrap() {
-  supabase = initSupabase();
+  supabaseClient = initSupabase();
 
   // Dev mode: show skip button and bypass auth if configured.
   if (env.requireAuth === false || env.requireAuth === 'false') {
@@ -1048,7 +1048,7 @@ async function bootstrap() {
   setupNavigation();
   setupScreeningForms();
 
-  if (!supabase) {
+  if (!supabaseClient) {
     showToast('Supabase is not configured. Some features will not work.', 'error');
     if (env.requireAuth === false || env.requireAuth === 'false') {
       devSkipAuth();
@@ -1064,7 +1064,7 @@ async function bootstrap() {
   }
 
   // Listen for auth state changes (login, logout, token refresh).
-  supabase.auth.onAuthStateChange((_event, newSession) => {
+  supabaseClient.auth.onAuthStateChange((_event, newSession) => {
     session = newSession;
     if (newSession) {
       onSessionReady();
@@ -1079,7 +1079,7 @@ async function bootstrap() {
   if (handledRedirect) return;
 
   // Otherwise load the existing session from storage.
-  const { data, error } = await supabase.auth.getSession();
+  const { data, error } = await supabaseClient.auth.getSession();
   if (error) {
     console.error('Get session error:', error);
   }
@@ -1087,4 +1087,30 @@ async function bootstrap() {
   await onSessionReady();
 }
 
-document.addEventListener('DOMContentLoaded', bootstrap);
+function showStartupError(error) {
+  console.error('Application startup failed:', error);
+  showElement('sidebar', false);
+  showElement('main', false);
+  showElement('startup-view', true);
+
+  const message = el('startup-message');
+  if (message) {
+    message.textContent = 'FinAtlas could not finish loading. Check your configuration and try again.';
+  }
+
+  const spinner = qs('.startup-spinner');
+  if (spinner) spinner.classList.add('hidden');
+  showElement('startup-retry', true);
+}
+
+async function startApp() {
+  showElement('startup-view', false);
+  showElement('startup-retry', false);
+  try {
+    await bootstrap();
+  } catch (error) {
+    showStartupError(error);
+  }
+}
+
+document.addEventListener('DOMContentLoaded', startApp);
