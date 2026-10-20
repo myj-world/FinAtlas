@@ -9,12 +9,7 @@ from supabase import Client, create_client
 
 
 def _decode_jwt_payload(token: str) -> Dict[str, Any]:
-    """Decode a JWT payload without verifying the signature.
-
-    The signature is verified by Supabase Postgres RLS when the token is used
-    with the Supabase client, so unverified decoding here is only used for
-    application-level claim checks such as the MFA assurance level.
-    """
+    """Decode a JWT payload without verifying the signature."""
     parts = token.split(".")
     if len(parts) != 3:
         return {}
@@ -69,8 +64,6 @@ def get_current_user(client: Client, jwt: Optional[str] = None) -> Optional[Dict
     try:
         response = client.auth.get_user(jwt=jwt) if jwt else client.auth.get_user()
     except Exception:
-        # Some versions of gotrue-py do not accept a jwt keyword; fall back to
-        # setting the session and reading the current user.
         if jwt:
             try:
                 client.auth.set_session(jwt, "")
@@ -92,6 +85,9 @@ def check_mfa_level(user_token: str) -> Tuple[bool, Optional[str]]:
     """Return (is_aal2, assurance_level) for the supplied access token."""
     payload = _decode_jwt_payload(user_token)
     aal = payload.get("aal")
+    if aal is None:
+        return False, None
+    aal = str(aal).lower()
     return aal == "aal2", aal
 
 
@@ -106,12 +102,7 @@ def auth_required() -> bool:
 
 
 def get_auth_context(user_token: Optional[str]) -> Dict[str, Any]:
-    """Resolve the user context from a Bearer token.
-
-    Returns a dict with client, user, mfa_ok, and error. If Supabase is not
-    configured, the user is treated as anonymous and endpoints that do not
-    require auth can still function.
-    """
+    """Resolve the user context from a Bearer token."""
     if auth_required() and not user_token:
         return {
             "client": None,
@@ -147,13 +138,14 @@ def get_auth_context(user_token: Optional[str]) -> Dict[str, Any]:
         }
 
     if mfa_required():
-        mfa_ok, _ = check_mfa_level(user_token)
+        mfa_ok, aal = check_mfa_level(user_token)
         if not mfa_ok:
             return {
                 "client": client,
                 "user": user,
                 "mfa_ok": False,
                 "error": "Multi-factor authentication required (AAL2)",
+                "aal": aal,
             }
 
     return {
