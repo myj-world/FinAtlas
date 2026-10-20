@@ -85,7 +85,6 @@ async function enrollMfa() {
     if (error) {
       const msg = (error.message || '').toLowerCase();
 
-      // Handle stale factors robustly
       if (msg.includes('already exists') || msg.includes('unverified') || msg.includes('factor')) {
         await cleanupStaleMfaFactors();
 
