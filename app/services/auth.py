@@ -30,22 +30,18 @@ def _decode_jwt_payload(token: str) -> Dict[str, Any]:
 
 
 def _apply_user_token(client: Client, token: str) -> None:
-    """Configure a Supabase client so that DB calls are executed as the user.
-
-    This sets the Authorization header used by PostgREST so that Row Level
-    Security policies see auth.uid() == the token's user.
-    """
-    # Modern postgrest-py clients expose an auth() helper.
     try:
         if hasattr(client, "postgrest") and callable(getattr(client.postgrest, "auth", None)):
             client.postgrest.auth(token)
     except Exception:
         pass
 
-    # Fallback / additional global header.
     try:
-        if hasattr(client, "options") and hasattr(client.options, "global"):
-            client.options.global.headers["Authorization"] = f"Bearer {token}"
+        options = getattr(client, "options", None)
+        global_options = getattr(options, "global", None)
+        headers = getattr(global_options, "headers", None)
+        if headers is not None:
+            headers["Authorization"] = f"Bearer {token}"
     except Exception:
         pass
 
