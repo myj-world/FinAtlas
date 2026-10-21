@@ -40,3 +40,5 @@ python -m pytest
 
 License
 MIT
+
+### Developed for NED × DevMarketplace Hackathon (19th-22nd October, 2026)
