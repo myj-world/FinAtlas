@@ -1,7 +1,9 @@
 import json
+from types import SimpleNamespace
 
 import pytest
 
+from app.services import auth
 from app.services.gemini import GeminiError
 
 
@@ -152,6 +154,64 @@ class TestScreeningsEndpoint:
         assert response.status_code == 200
         data = response.get_json()
         assert "screenings" in data
+
+    def test_accepts_api_key_bearer_and_scopes_to_owner(
+        self, client, monkeypatch
+    ):
+        api_key = "finatlas_test_api_key"
+        owner_id = "user-123"
+        query_filters = []
+
+        class Query:
+            def __init__(self, table):
+                self.table = table
+
+            def select(self, *_args, **_kwargs):
+                return self
+
+            def eq(self, column, value):
+                query_filters.append((self.table, column, value))
+                return self
+
+            def maybe_single(self):
+                return self
+
+            def order(self, *_args, **_kwargs):
+                return self
+
+            def limit(self, *_args, **_kwargs):
+                return self
+
+            def offset(self, *_args, **_kwargs):
+                return self
+
+            def execute(self):
+                if self.table == "api_keys":
+                    key_matches = ("api_keys", "key_text", api_key) in query_filters
+                    key_active = ("api_keys", "revoked", False) in query_filters
+                    data = {"user_id": owner_id} if key_matches and key_active else None
+                else:
+                    data = []
+                return SimpleNamespace(data=data)
+
+        class SupabaseClient:
+            def table(self, name):
+                return Query(name)
+
+        monkeypatch.setenv("SUPABASE_URL", "https://example.supabase.co")
+        monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "service-role")
+        monkeypatch.setenv("SUPABASE_KEY", "anon-key")
+        monkeypatch.setattr(auth, "auth_required", lambda: True)
+        monkeypatch.setattr(auth, "create_client", lambda *_args: SupabaseClient())
+        assert auth.get_api_key_user_id(api_key) == owner_id, query_filters
+
+        response = client.get(
+            "/api/screenings",
+            headers={"Authorization": "Bearer " + api_key},
+        )
+
+        assert response.status_code == 200, response.get_json()
+        assert ("screenings", "user_id", owner_id) in query_filters
 
 
 class TestCasesEndpoint:

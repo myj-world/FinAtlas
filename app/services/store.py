@@ -3,7 +3,7 @@
 import json
 from typing import Any, Dict, List, Optional
 
-from app.services.auth import get_supabase_client
+from app.services.auth import get_client_api_key_user_id, get_supabase_client
 
 
 def _safe_json(value: Any) -> Any:
@@ -11,8 +11,21 @@ def _safe_json(value: Any) -> Any:
     return json.loads(json.dumps(value, default=str))
 
 
-def _insert(client, table: str, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+def _scope_query(query, client):
+    user_id = get_client_api_key_user_id(client)
+    return query.eq("user_id", user_id) if user_id else query
+
+
+def _insert(
+    client,
+    table: str,
+    data: Dict[str, Any],
+    user_token: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
     try:
+        user_id = get_client_api_key_user_id(client)
+        if user_id:
+            data = {**data, "user_id": user_id}
         response = client.table(table).insert(data).execute()
         rows = getattr(response, "data", None)
         return rows[0] if rows else None
@@ -45,7 +58,7 @@ def persist_screening(
         "sanctions_hits": _safe_json(sanctions_hits or []),
         "rules": _safe_json(rules or []),
     }
-    return _insert(client, "screenings", data)
+    return _insert(client, "screenings", data, user_token)
 
 
 def persist_batch(
@@ -65,7 +78,7 @@ def persist_batch(
         "failed": 0,
         "results": [],
     }
-    row = _insert(client, "batches", data)
+    row = _insert(client, "batches", data, user_token)
     return row.get("id") if row else None
 
 
@@ -78,14 +91,14 @@ def fetch_batches(
     if not client:
         return []
     try:
-        response = (
+        query = (
             client.table("batches")
             .select("*")
             .order("created_at", desc=True)
             .limit(limit)
             .offset(offset)
-            .execute()
         )
+        response = _scope_query(query, client).execute()
         return getattr(response, "data", []) or []
     except Exception:
         return []
@@ -96,7 +109,8 @@ def fetch_batch(user_token: str, batch_id: str) -> Optional[Dict[str, Any]]:
     if not client:
         return None
     try:
-        response = client.table("batches").select("*").eq("id", batch_id).single().execute()
+        query = client.table("batches").select("*").eq("id", batch_id)
+        response = _scope_query(query, client).single().execute()
         return getattr(response, "data", None)
     except Exception:
         return None
@@ -111,14 +125,14 @@ def fetch_screenings(
     if not client:
         return []
     try:
-        response = (
+        query = (
             client.table("screenings")
             .select("*")
             .order("created_at", desc=True)
             .limit(limit)
             .offset(offset)
-            .execute()
         )
+        response = _scope_query(query, client).execute()
         return getattr(response, "data", []) or []
     except Exception:
         return []
@@ -129,13 +143,12 @@ def fetch_screening(user_token: str, screening_id: str) -> Optional[Dict[str, An
     if not client:
         return None
     try:
-        response = (
+        query = (
             client.table("screenings")
             .select("*")
             .eq("id", screening_id)
-            .single()
-            .execute()
         )
+        response = _scope_query(query, client).single().execute()
         return getattr(response, "data", None)
     except Exception:
         return None
@@ -172,7 +185,7 @@ def persist_case(
         "status": status,
         "notes": notes,
     }
-    return _insert(client, "cases", data)
+    return _insert(client, "cases", data, user_token)
 
 
 def fetch_cases(
@@ -184,26 +197,26 @@ def fetch_cases(
     if not client:
         return []
     try:
-        response = (
+        query = (
             client.table("cases")
             .select("*, screenings!inner(transaction_id, final_score, classification)")
             .order("created_at", desc=True)
             .limit(limit)
             .offset(offset)
-            .execute()
         )
+        response = _scope_query(query, client).execute()
         return getattr(response, "data", []) or []
     except Exception:
         # Fallback without the join if the inner join fails for any reason.
         try:
-            response = (
+            query = (
                 client.table("cases")
                 .select("*")
                 .order("created_at", desc=True)
                 .limit(limit)
                 .offset(offset)
-                .execute()
             )
+            response = _scope_query(query, client).execute()
             return getattr(response, "data", []) or []
         except Exception:
             return []
@@ -214,7 +227,8 @@ def fetch_case(user_token: str, case_id: str) -> Optional[Dict[str, Any]]:
     if not client:
         return None
     try:
-        response = client.table("cases").select("*").eq("id", case_id).single().execute()
+        query = client.table("cases").select("*").eq("id", case_id)
+        response = _scope_query(query, client).single().execute()
         return getattr(response, "data", None)
     except Exception:
         return None
@@ -239,9 +253,8 @@ def update_case(
         return fetch_case(user_token, case_id)
 
     try:
-        response = (
-            client.table("cases").update(data).eq("id", case_id).execute()
-        )
+        query = client.table("cases").update(data).eq("id", case_id)
+        response = _scope_query(query, client).execute()
         rows = getattr(response, "data", None)
         return rows[0] if rows else None
     except Exception:
@@ -253,7 +266,8 @@ def delete_case(user_token: str, case_id: str) -> bool:
     if not client:
         return False
     try:
-        client.table("cases").delete().eq("id", case_id).execute()
+        query = client.table("cases").delete().eq("id", case_id)
+        _scope_query(query, client).execute()
         return True
     except Exception:
         return False
@@ -272,14 +286,14 @@ def fetch_dashboard_stats(user_token: str) -> Dict[str, Any]:
         }
 
     try:
-        all_screenings = (
+        query = (
             client.table("screenings")
             .select(
                 "id, deterministic_score, final_score, classification, transaction_id, created_at, gemini_result"
             )
             .order("created_at", desc=True)
-            .execute()
         )
+        all_screenings = _scope_query(query, client).execute()
         screenings = getattr(all_screenings, "data", []) or []
     except Exception:
         screenings = []
@@ -302,12 +316,12 @@ def fetch_dashboard_stats(user_token: str) -> Dict[str, Any]:
 
     open_cases = 0
     try:
-        cases_resp = (
+        query = (
             client.table("cases")
             .select("id", count="exact")
             .eq("status", "open")
-            .execute()
         )
+        cases_resp = _scope_query(query, client).execute()
         open_cases = getattr(cases_resp, "count", 0) or 0
     except Exception:
         pass

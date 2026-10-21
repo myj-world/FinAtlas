@@ -41,8 +41,55 @@ def _apply_user_token(client: Client, token: str) -> None:
         pass
 
 
+def _get_service_role_client() -> Optional[Client]:
+    url = os.getenv("SUPABASE_URL")
+    key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+    if not url or not key:
+        return None
+    try:
+        return create_client(url, key)
+    except Exception:
+        return None
+
+
+def get_api_key_user_id(api_key: Optional[str]) -> Optional[str]:
+    """Return the owner of an active API key, if the service role is configured."""
+    if not api_key or api_key.count(".") == 2:
+        return None
+    client = _get_service_role_client()
+    if client is None:
+        return None
+    try:
+        response = (
+            client.table("api_keys")
+            .select("user_id")
+            .eq("key_text", api_key)
+            .eq("revoked", False)
+            .maybe_single()
+            .execute()
+        )
+        row = getattr(response, "data", None)
+        return row.get("user_id") if row else None
+    except Exception:
+        return None
+
+
+def get_client_api_key_user_id(client: Optional[Client]) -> Optional[str]:
+    if client is None:
+        return None
+    user_id = getattr(client, "_finatlas_api_key_user_id", None)
+    return user_id if isinstance(user_id, str) else None
+
+
 def get_supabase_client(user_token: Optional[str] = None) -> Optional[Client]:
-    """Return a Supabase client configured with the anon key and optional user JWT."""
+    """Return a user JWT client or a service client for a valid API key."""
+    api_key_user_id = get_api_key_user_id(user_token)
+    if api_key_user_id:
+        client = _get_service_role_client()
+        if client is not None:
+            setattr(client, "_finatlas_api_key_user_id", api_key_user_id)
+        return client
+
     url = os.getenv("SUPABASE_URL")
     key = os.getenv("SUPABASE_KEY") or os.getenv("SUPABASE_ANON_KEY")
     if not url or not key:
@@ -111,6 +158,14 @@ def get_auth_context(user_token: Optional[str]) -> Dict[str, Any]:
             "error": "Authorization required",
         }
 
+    if not auth_required() and not user_token:
+        return {
+            "client": get_supabase_client(),
+            "user": None,
+            "mfa_ok": True,
+            "error": None,
+        }
+
     client = get_supabase_client(user_token)
     if client is None:
         return {
@@ -118,6 +173,16 @@ def get_auth_context(user_token: Optional[str]) -> Dict[str, Any]:
             "user": None,
             "mfa_ok": False,
             "error": "Supabase is not configured",
+        }
+
+    api_key_user_id = get_client_api_key_user_id(client)
+    if api_key_user_id:
+        return {
+            "client": client,
+            "user": {"id": api_key_user_id, "role": "authenticated"},
+            "mfa_ok": True,
+            "error": None,
+            "api_key": True,
         }
 
     if not auth_required():

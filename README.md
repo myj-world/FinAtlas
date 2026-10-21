@@ -22,6 +22,7 @@ Quick start
    ```
 2. Set required secrets in the workspace Secrets panel or local environment using the `.env.example` as a guide (do not commit secrets):
    - SUPABASE_URL, SUPABASE_KEY or SUPABASE_ANON_KEY
+   - SUPABASE_SERVICE_ROLE_KEY (required to authenticate API keys as bearer tokens)
    - VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY (browser-safe keys)
    - GEMINI_API_KEY (server-only)
    - REQUIRE_AUTH, REQUIRE_MFA (true/false)
@@ -45,6 +46,7 @@ API
 - GET /api/screenings/<id> — screening detail including Gemini reasoning.
 - Cases API: GET/POST/PATCH/DELETE /api/cases
 - API Keys: GET/POST /api/api-keys, POST /api/api-keys/<id>/revoke, POST /api/api-keys/<id>/rotate
+- Protected API endpoints accept either a Supabase access token or an active API key in `Authorization: Bearer <token>`.
 
 Testing
 Run the test suite with:

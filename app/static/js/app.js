@@ -1112,7 +1112,14 @@ async function bootstrap() {
         showToast(data.error || 'Unable to create API key', 'error');
       } else {
         showToast('API key created. It is shown once — copy it now.', 'success');
-        renderApiKeys([data, ...(await fetchApiKeys())]);
+        const keys = await fetchApiKeys();
+        const current = keys.findIndex((key) => key.id === data.id);
+        if (current === -1) {
+          keys.unshift(data);
+        } else {
+          keys[current] = { ...keys[current], ...data };
+        }
+        renderApiKeys(keys);
       }
     } catch (err) {
       console.error('Create API key error', err);

@@ -4,7 +4,7 @@ import json
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Dict, List, Optional
 
-from app.services.auth import get_supabase_client
+from app.services.auth import get_client_api_key_user_id, get_supabase_client
 from app.services.scoring import screen_transaction
 
 
@@ -59,6 +59,7 @@ def _run_batch(
         client,
         batch_id,
         {"status": "running", "total": total, "processed": 0},
+        user_token,
     )
 
     results: List[Dict[str, Any]] = []
@@ -91,6 +92,7 @@ def _run_batch(
                     "failed": failed,
                     "results": json.loads(json.dumps(results, default=str)),
                 },
+                user_token,
             )
 
     final_status = "completed" if failed == 0 else "failed"
@@ -104,12 +106,22 @@ def _run_batch(
             "failed": failed,
             "results": json.loads(json.dumps(results, default=str)),
         },
+        user_token,
     )
 
 
-def _update_batch(client, batch_id: str, fields: Dict[str, Any]) -> None:
+def _update_batch(
+    client,
+    batch_id: str,
+    fields: Dict[str, Any],
+    user_token: Optional[str],
+) -> None:
     try:
-        client.table("batches").update(fields).eq("id", batch_id).execute()
+        query = client.table("batches").update(fields).eq("id", batch_id)
+        user_id = get_client_api_key_user_id(client)
+        if user_id:
+            query = query.eq("user_id", user_id)
+        query.execute()
     except Exception:
         # Best-effort progress update; failures are surfaced via final status.
         pass
