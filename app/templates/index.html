@@ -372,6 +372,17 @@
   -H "Content-Type: application/json" \\
   -d '{"screening_id":"&lt;id&gt;","status":"open","notes":"Escalated for review"}'</pre>
           </div>
+
+          <!-- Per-user API keys -->
+          <div class="api-block" id="api-keys-block">
+            <h4>Your API keys</h4>
+            <p class="text-muted">Create and manage per-account API keys. Regenerating a key will revoke the previous key immediately.</p>
+            <div id="api-keys-container">Loading keys…</div>
+            <div style="margin-top:0.75rem">
+              <button id="create-api-key" class="btn btn-primary">Create API key</button>
+            </div>
+          </div>
+
         </div>
       </section>
     </main>

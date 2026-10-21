@@ -28,6 +28,13 @@ def _build_app() -> Flask:
     app.register_blueprint(auth_bp)
     app.register_blueprint(cases_bp)
     app.register_blueprint(screenings_bp)
+    # API keys management
+    try:
+        from app.routes.api_keys import bp as api_keys_bp
+
+        app.register_blueprint(api_keys_bp)
+    except Exception:
+        app.logger.info('API keys routes not available')
 
     init_batch_worker(max_workers=4)
 

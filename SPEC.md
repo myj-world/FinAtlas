@@ -1,95 +1,45 @@
-# FinAtlas — AI-Powered AML System
+# FinAtlas — AI-Powered AML System (Updated)
 
-## 1. Overview
+This document captures the current implementation and public APIs for FinAtlas.
 
-**Project:** FinAtlas
+1) Screening pipeline
+- Deterministic sanctions matching: exact/normalized matching against local XML files `unsc.xml`, `eu.xml`, `ofac.xml`.
+- Deterministic rules apply additive weights and are capped at 1.0. Weights configured in `app/config.py`.
+- Gemini REST API performs contextual verification and detects unusual transaction patterns. The Gemini result includes `updated_risk_score`, `unusual_pattern_detected`, `confidence`, `reasoning`, and `false_positive_assessment`.
+- Final score uses Gemini's `updated_risk_score` when available; otherwise deterministic score is used.
 
-**Pitch:** AI-powered anti-money laundering (AML) detection combining sanctions list matching, deterministic risk scoring, and Gemini AI analysis.
+2) Risk thresholds
+- High: > 0.85  — Definite Match / High Risk
+- Medium: >= 0.50 — Potential Match / Medium Risk
+- Low: < 0.50 — No Match / Low Risk
 
-FinAtlas streamlines AML screening by processing transaction data through deterministic sanctions checks, rule-based risk scoring, and Gemini-powered risk analysis, delivering actionable insights via UI and REST APIs.
+3) Persistence & RLS
+- Supabase tables: `screenings`, `cases`, `batches`, `api_keys`.
+- Every table has row-level security enabled and policies restricting access to `auth.uid() = user_id`.
 
----
+4) Public REST APIs (all under /api)
+- POST /api/screen/single — body: JSON transaction. Returns screening result and persists it under the signed-in user's context.
+- POST /api/screen/batch[?async=true] — body: JSON list or CSV file upload. Async returns immediately with a `batch_id` and processes rows in background; sync returns results inline.
+- GET /api/screen/batch/<id> — return batch job status and results.
+- GET /api/screenings — list screenings for the signed-in user.
+- GET /api/screenings/stats — dashboard statistics: risk distribution, disagreements, recent screenings, and open case count.
+- GET /api/screenings/<id> — detailed screening with Gemini reasoning.
+- Cases CRUD: GET/POST/PATCH/DELETE /api/cases
+- API keys: GET /api/api-keys, POST /api/api-keys to create, POST /api/api-keys/<id>/revoke to revoke, POST /api/api-keys/<id>/rotate to rotate (revokes old key and creates a new one).
 
-## 2. Data Model
+5) Frontend
+- Vanilla JS SPA in `app/templates/index.html` and `app/static/js/app.js`.
+- The UI requests safe config from the server and loads Supabase via the browser anon key. MFA is enforced on the client and server.
+- API page documents endpoints, includes copy buttons, and shows the per-user API keys with regenerate/revoke actions.
 
-Input data (CSV upload, sample dataset, or single-transaction manual entry) supports the following schema:
+6) Environment variables (see .env.example)
+- SUPABASE_URL, SUPABASE_KEY or SUPABASE_ANON_KEY
+- VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY (front-end-safe)
+- GEMINI_API_KEY (server-only)
+- REQUIRE_AUTH (true/false)
+- REQUIRE_MFA (true/false)
 
-* `transactionId`, `transactionDate`, `transactionType`
-* `amount`, `currency`
-* **Sender:** `senderName`, `senderDOB`, `senderPlaceOfBirth`, `senderNationality`, `senderCountry`, `senderAccount`
-* **Receiver:** `receiverName`, `receiverDOB`, `receiverPlaceOfBirth`, `receiverNationality`, `receiverCountry`, `receiverAccount`
-
----
-
-## 3. AML Screening Pipeline & Risk Scoring
-
-### Step 1: Direct Sanctions List Matching
-
-First-line deterministic matching against global sanctions lists:
-
-* **UNSC** Sanctions Consolidated List
-* **EU** Consolidated Sanctions List
-* **OFAC** Sanctions List
-
-### Step 2: Deterministic Rule-Based Scoring
-
-Initial cumulative risk score calculation (normalized to 1.0):
-
-* **Direct Sanctions Match:** +0.30
-* **Large Transaction (>$1,000 USD equivalent):** +0.05
-* **High-Risk Jurisdiction (Sender/Receiver Country):** +0.10
-* **Unusual Transaction Pattern (AI Detection):** +0.55
-
-### Step 3: Gemini AI Verification & Contextual Analysis
-
-Every transaction is sent via **Gemini REST API**, whether or not deterministic rules matched. Gemini evaluates the supplied transaction for an unusual pattern and returns its finding, confidence, reasoning, and false-positive assessment. The backend applies the AI pattern weight when Gemini detects one, adds it to the deterministic score, and caps the final normalized score at 1.0. Gemini must not infer transaction history or facts absent from the input.
-
-### Risk Classification Thresholds
-
-* **$> 0.85$:** Definite Match / High Risk
-* **$0.50 - 0.85$:** Potential Match / Medium Risk
-* **$< 0.50$:** No Match / Low Risk
-
----
-
-## 4. Core Features
-
-* **Multi-Format Ingestion:** Bulk CSV dataset uploads, pre-loaded sample data, or single-transaction manual entry.
-* **Hybrid AML Engine:** Combined sanctions list direct matching, heuristic rules, and Gemini AI verification.
-* **Interactive Dashboard:** Display risk distributions, alert disagreements, and detailed risk explanations.
-* **REST API Integration:** Programmatic endpoints for single or batch screening.
-* **Case Management:** Persistent investigation tracking backed by Supabase with user isolation.
-
----
-
-## 5. Technology Stack
-
-* **Frontend:** HTML, CSS, JavaScript
-* **Backend:** Python, Flask (REST APIs)
-* **Data Processing:** Pandas
-* **Database & Auth:** Supabase PostgreSQL & Supabase Auth (with MFA)
-* **AI Engine:** Gemini REST API
-* **Version Control:** Git & GitHub
-
----
-
-## 6. System Architecture & API Endpoints
-
-```
-[ Frontend / API Client ] 
-           │
-           ▼
-     [ Flask API ]
-     ├── 1. Direct Sanctions Match (UNSC, EU, OFAC)
-     ├── 2. Rule Risk Engine (Amount, Country, Patterns)
-     └── 3. Gemini REST API (Verification & Deep Analysis)
-           │
-           ▼
-[ Supabase PostgreSQL ] (Persisted Cases & Row-Level Security)
-
-```
-
-### Core API Endpoints
-
-* `POST /api/screen/single` — Screen a single transaction object.
-* `POST /api/screen/batch` — Ingest CSV/batch data for background processing.
+7) Limitations / Notes
+- The current migration to add `api_keys` has been applied in `supabase/migrations/20261021071739_create_api_keys_table_v3.sql`.
+- The Supabase service-role key is intentionally not used; all DB access goes through the anon key and RLS policies.
+- Gemini failures raise a GeminiError and return 503 for affected endpoints.

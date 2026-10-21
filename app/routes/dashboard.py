@@ -37,7 +37,9 @@ def public_config():
 
 @bp.route("/icon.png")
 def favicon():
-    """Serve the project-root icon.png if it exists."""
+    """Serve the project-root icon.png if it exists. Falls back to icon.jpg for older projects."""
     if os.path.exists("icon.png"):
         return send_from_directory(os.getcwd(), "icon.png", mimetype="image/png")
+    if os.path.exists("icon.jpg"):
+        return send_from_directory(os.getcwd(), "icon.jpg", mimetype="image/jpeg")
     abort(404)

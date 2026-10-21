@@ -259,7 +259,70 @@ def delete_case(user_token: str, case_id: str) -> bool:
         return False
 
 
-def fetch_dashboard_stats(user_token: str) -> Dict[str, Any]:
+def fetch_dashboard_stats(user_token: str) -> Dict[str, Any>:
+    """Return aggregate statistics for the investigator dashboard."""
+    client = get_supabase_client(user_token)
+    if not client:
+        return {
+            "total_screenings": 0,
+            "risk_distribution": {},
+            "alert_disagreements": 0,
+            "recent_screenings": [],
+            "open_cases": 0,
+        }
+
+    try:
+        all_screenings = (
+            client.table("screenings")
+            .select("id, deterministic_score, final_score, classification, transaction_id, created_at, gemini_result")
+            .order("created_at", desc=True)
+            .execute()
+        )
+        screenings = getattr(all_screenings, "data", []) or []
+    except Exception:
+        screenings = []
+
+    distribution: Dict[str, int] = {}
+    disagreements = 0
+    disagreement_rows: List[Dict[str, Any]] = []
+    for row in screenings:
+        classification = row.get("classification") or "Unknown"
+        distribution[classification] = distribution.get(classification, 0) + 1
+
+        det = float(row.get("deterministic_score") or 0)
+        final = float(row.get("final_score") or 0)
+        det_class = _classify(det)
+        final_class = _classify(final)
+        if det_class != final_class:
+            disagreements += 1
+            disagreement_rows.append(row)
+
+    open_cases = 0
+    try:
+        cases_resp = client.table("cases").select("id", count="exact").eq("status", "open").execute()
+        open_cases = getattr(cases_resp, "count", 0) or 0
+    except Exception:
+        pass
+
+    return {
+        "total_screenings": len(screenings),
+        "risk_distribution": distribution,
+        "alert_disagreements": disagreements,
+        "disagreement_screenings": disagreement_rows[:10],
+        "recent_screenings": screenings[:5],
+        "open_cases": open_cases,
+    }
+
+
+def _classify(score: float) -> str:
+    from app.config import THRESHOLD_HIGH, THRESHOLD_MEDIUM
+
+    if score > THRESHOLD_HIGH:
+        return "Definite Match / High Risk"
+    if score >= THRESHOLD_MEDIUM:
+        return "Potential Match / Medium Risk"
+    return "No Match / Low Risk"
+
     """Return aggregate statistics for the investigator dashboard."""
     client = get_supabase_client(user_token)
     if not client:

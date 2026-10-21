@@ -1102,6 +1102,28 @@ async function bootstrap() {
     return;
   }
 
+  // Hook up API keys UI
+  el('create-api-key')?.addEventListener('click', async () => {
+    setLoading(el('create-api-key'), true);
+    try {
+      const resp = await apiFetch('/api/api-keys', { method: 'POST' });
+      const data = await resp.json();
+      if (!resp.ok) {
+        showToast(data.error || 'Unable to create API key', 'error');
+      } else {
+        showToast('API key created. It is shown once — copy it now.', 'success');
+        renderApiKeys([data, ...(await fetchApiKeys())]);
+      }
+    } catch (err) {
+      console.error('Create API key error', err);
+      showToast('Failed to create API key', 'error');
+    } finally {
+      setLoading(el('create-api-key'), false);
+    }
+  });
+
+  fetchApiKeys().then((keys) => renderApiKeys(keys)).catch((e) => console.error(e));
+
   // Listen for auth state changes (login, logout, token refresh).
   supabaseClient.auth.onAuthStateChange((_event, newSession) => {
     session = newSession;
@@ -1159,3 +1181,104 @@ async function startApp() {
 }
 
 document.addEventListener('DOMContentLoaded', startApp);
+
+async function fetchApiKeys() {
+  try {
+    const resp = await apiFetch('/api/api-keys');
+    if (!resp.ok) return [];
+    const data = await resp.json();
+    return data.keys || [];
+  } catch (err) {
+    return [];
+  }
+}
+
+function renderApiKeys(keys) {
+  const container = el('api-keys-container');
+  if (!container) return;
+  if (!keys.length) {
+    container.innerHTML = '<div class="text-muted">No API keys. Create one to use the REST API without a Supabase session.</div>';
+    return;
+  }
+
+  container.innerHTML = keys
+    .map((k) => `
+      <div class="api-key-item card" style="margin-top:0.5rem; padding:0.85rem; display:flex; align-items:center; justify-content:space-between; gap:0.8rem">
+        <div style="flex:1">
+          <div style="font-weight:700;">${k.id.slice(0,8)}${k.revoked ? ' (revoked)' : ''}</div>
+          <div style="font-size:0.85rem; color:var(--text-muted);">Created: ${formatDate(k.created_at)}</div>
+        </div>
+        <div style="display:flex; gap:0.5rem; align-items:center">
+          <button class="btn btn-sm btn-secondary copy-key" data-key="${k.key_text || ''}">Copy</button>
+          <button class="btn btn-sm btn-ghost revoke-key" data-id="${k.id}">Revoke</button>
+          <button class="btn btn-sm btn-ghost rotate-key" data-id="${k.id}">Rotate</button>
+        </div>
+      </div>`)
+    .join('');
+
+  qsa('.copy-key', container).forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const key = btn.dataset.key || '';
+      if (!key) {
+        showToast('This key value is not available to copy. Create a new key to reveal its value.', 'info');
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(key);
+        showToast('API key copied to clipboard', 'success');
+      } catch (err) {
+        showToast('Could not copy key to clipboard', 'error');
+      }
+    });
+  });
+
+  qsa('.revoke-key', container).forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      if (!confirm('Revoke this API key? This will disable it immediately.')) return;
+      setLoading(btn, true);
+      try {
+        const id = btn.dataset.id;
+        const resp = await apiFetch(`/api/api-keys/${id}/revoke`, { method: 'POST' });
+        if (!resp.ok) {
+          const d = await resp.json().catch(() => ({}));
+          showToast(d.error || 'Failed to revoke key', 'error');
+        } else {
+          showToast('API key revoked', 'success');
+          const keys = await fetchApiKeys();
+          renderApiKeys(keys);
+        }
+      } catch (err) {
+        console.error('Revoke key error', err);
+        showToast('Failed to revoke API key', 'error');
+      } finally {
+        setLoading(btn, false);
+      }
+    });
+  });
+
+  qsa('.rotate-key', container).forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      if (!confirm('Rotate this API key? The previous key will be revoked and a new key created.')) return;
+      setLoading(btn, true);
+      try {
+        const id = btn.dataset.id;
+        const resp = await apiFetch(`/api/api-keys/${id}/rotate`, { method: 'POST' });
+        const d = await resp.json();
+        if (!resp.ok) {
+          showToast(d.error || 'Failed to rotate key', 'error');
+        } else {
+          showToast('API key rotated. Copy the new key now.', 'success');
+          // The rotate endpoint returns the new key object; it may include key_text
+          const keys = await fetchApiKeys();
+          // Place the new key first
+          renderApiKeys([d, ...keys.filter((k) => k.id !== d.id)]);
+        }
+      } catch (err) {
+        console.error('Rotate key error', err);
+        showToast('Failed to rotate API key', 'error');
+      } finally {
+        setLoading(btn, false);
+      }
+    });
+  });
+}
