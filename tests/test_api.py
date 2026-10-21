@@ -39,6 +39,9 @@ class TestHomePage:
         assert b'id="mfa-error-view"' in response.data
         assert b'id="mfa-retry-btn"' in response.data
         assert b'<script defer src="https://cdn.jsdelivr.net/npm/@supabase' in response.data
+        assert response.data.count(b'class="btn btn-sm btn-secondary copy-code"') == 3
+        assert b'https://finatlas-wrin.onrender.com/api/screen/single' in response.data
+        assert b'https://your-host' not in response.data
 
 
 class TestSingleScreenEndpoint:

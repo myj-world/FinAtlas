@@ -2,6 +2,8 @@
 
 This document captures the current implementation and public APIs for FinAtlas.
 
+Live application: https://finatlas-wrin.onrender.com/
+
 1) Screening pipeline
 - Deterministic sanctions matching: exact/normalized matching against local XML files `unsc.xml`, `eu.xml`, `ofac.xml`.
 - Deterministic rules apply additive weights and are capped at 1.0. Weights configured in `app/config.py`.
@@ -30,16 +32,17 @@ This document captures the current implementation and public APIs for FinAtlas.
 5) Frontend
 - Vanilla JS SPA in `app/templates/index.html` and `app/static/js/app.js`.
 - The UI requests safe config from the server and loads Supabase via the browser anon key. MFA is enforced on the client and server.
-- API page documents endpoints, includes copy buttons, and shows the per-user API keys with regenerate/revoke actions.
+- API page documents endpoints, includes copy buttons for curl examples, and shows multiple per-user API keys with copy, rotate, and revoke controls for active keys.
 
 6) Environment variables (see .env.example)
 - SUPABASE_URL, SUPABASE_KEY or SUPABASE_ANON_KEY
 - VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY (front-end-safe)
+- SUPABASE_SERVICE_ROLE_KEY (server-only, required for API-key bearer authentication)
 - GEMINI_API_KEY (server-only)
 - REQUIRE_AUTH (true/false)
 - REQUIRE_MFA (true/false)
 
 7) Limitations / Notes
 - The current migration to add `api_keys` has been applied in `supabase/migrations/20261021071739_create_api_keys_table_v3.sql`.
-- The Supabase service-role key is intentionally not used; all DB access goes through the anon key and RLS policies.
+- API keys are accepted as bearer tokens and are scoped to their owner using the server-side Supabase service-role key.
 - Gemini failures raise a GeminiError and return 503 for affected endpoints.

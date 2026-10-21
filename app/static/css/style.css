@@ -547,11 +547,13 @@ input:focus, select:focus, textarea:focus {
 /* API docs */
 .api-block { margin-top: 1.25rem; }
 .api-block h4 { margin: 0 0 0.35rem; color: var(--primary); }
+.code-block-wrapper { position: relative; }
+.copy-code { position: absolute; top: 0.5rem; right: 0.5rem; z-index: 1; }
 .code-block {
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  padding: 1rem;
+  padding: 2.75rem 1rem 1rem;
   overflow-x: auto;
   font-size: 0.8rem;
   color: var(--text-muted);

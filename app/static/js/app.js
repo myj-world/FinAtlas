@@ -119,6 +119,7 @@ function showView(viewName) {
   if (viewName === 'screenings') loadScreenings();
   if (viewName === 'cases') loadCases();
   if (viewName === 'batches') loadBatches();
+  if (viewName === 'api') loadApiKeys();
 }
 
 function showAuth() {
@@ -1008,6 +1009,25 @@ function setupNavigation() {
   });
 }
 
+function setupCodeBlockCopyButtons() {
+  qsa('.copy-code').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const code = button.parentElement?.querySelector('.code-block')?.textContent;
+      if (!code) {
+        showToast('No code found to copy', 'error');
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(code);
+        showToast('Code copied to clipboard', 'success');
+      } catch (err) {
+        console.error('Copy API example error:', err);
+        showToast('Could not copy code to clipboard', 'error');
+      }
+    });
+  });
+}
+
 function setupAuthForms() {
   el('signin-form')?.addEventListener('submit', handleSignIn);
   el('signup-form')?.addEventListener('submit', handleSignUp);
@@ -1086,6 +1106,7 @@ async function bootstrap() {
   setupAuthForms();
   setupNavigation();
   setupScreeningForms();
+  setupCodeBlockCopyButtons();
 
   if (!supabaseClient) {
     showToast('Supabase is not configured. Some features will not work.', 'error');
@@ -1111,8 +1132,15 @@ async function bootstrap() {
       if (!resp.ok) {
         showToast(data.error || 'Unable to create API key', 'error');
       } else {
-        showToast('API key created. It is shown once — copy it now.', 'success');
-        const keys = await fetchApiKeys();
+        showToast('API key created.', 'success');
+        let keys = await fetchApiKeys().catch((err) => {
+          console.error('Refresh API keys error', err);
+          showToast('The key was created, but the API key list could not be refreshed.', 'error');
+          return null;
+        });
+        if (!keys) {
+          keys = currentApiKeys;
+        }
         const current = keys.findIndex((key) => key.id === data.id);
         if (current === -1) {
           keys.unshift(data);
@@ -1128,8 +1156,6 @@ async function bootstrap() {
       setLoading(el('create-api-key'), false);
     }
   });
-
-  fetchApiKeys().then((keys) => renderApiKeys(keys)).catch((e) => console.error(e));
 
   // Listen for auth state changes (login, logout, token refresh).
   supabaseClient.auth.onAuthStateChange((_event, newSession) => {
@@ -1189,22 +1215,38 @@ async function startApp() {
 
 document.addEventListener('DOMContentLoaded', startApp);
 
+let currentApiKeys = [];
+
 async function fetchApiKeys() {
+  const resp = await apiFetch('/api/api-keys');
+  if (!resp.ok) {
+    const data = await resp.json().catch(() => ({}));
+    throw new Error(data.error || 'Unable to load API keys');
+  }
+  const data = await resp.json();
+  return data.keys || [];
+}
+
+async function loadApiKeys() {
+  const container = el('api-keys-container');
+  if (container) container.textContent = 'Loading keys…';
   try {
-    const resp = await apiFetch('/api/api-keys');
-    if (!resp.ok) return [];
-    const data = await resp.json();
-    return data.keys || [];
+    currentApiKeys = await fetchApiKeys();
+    renderApiKeys(currentApiKeys);
   } catch (err) {
-    return [];
+    console.error('Load API keys error', err);
+    if (container) {
+      container.innerHTML = '<div class="text-muted">Unable to load API keys. Check your connection and try again.</div>';
+    }
   }
 }
 
 function renderApiKeys(keys) {
+  currentApiKeys = keys;
   const container = el('api-keys-container');
   if (!container) return;
   if (!keys.length) {
-    container.innerHTML = '<div class="text-muted">No API keys. Create one to use the REST API without a Supabase session.</div>';
+    container.innerHTML = '<div class="text-muted">No API keys yet. Create one or more keys for REST API access.</div>';
     return;
   }
 
@@ -1216,9 +1258,9 @@ function renderApiKeys(keys) {
           <div style="font-size:0.85rem; color:var(--text-muted);">Created: ${formatDate(k.created_at)}</div>
         </div>
         <div style="display:flex; gap:0.5rem; align-items:center">
-          <button class="btn btn-sm btn-secondary copy-key" data-key="${k.key_text || ''}">Copy</button>
-          <button class="btn btn-sm btn-ghost revoke-key" data-id="${k.id}">Revoke</button>
-          <button class="btn btn-sm btn-ghost rotate-key" data-id="${k.id}">Rotate</button>
+          ${k.revoked ? '' : `<button class="btn btn-sm btn-secondary copy-key" data-key="${k.key_text || ''}">Copy</button>`}
+          ${k.revoked ? '' : `<button class="btn btn-sm btn-ghost revoke-key" data-id="${k.id}">Revoke</button>`}
+          ${k.revoked ? '' : `<button class="btn btn-sm btn-ghost rotate-key" data-id="${k.id}">Rotate</button>`}
         </div>
       </div>`)
     .join('');
@@ -1274,7 +1316,7 @@ function renderApiKeys(keys) {
         if (!resp.ok) {
           showToast(d.error || 'Failed to rotate key', 'error');
         } else {
-          showToast('API key rotated. Copy the new key now.', 'success');
+          showToast('API key rotated.', 'success');
           // The rotate endpoint returns the new key object; it may include key_text
           const keys = await fetchApiKeys();
           // Place the new key first

@@ -4,7 +4,7 @@
 
 FinAtlas combines deterministic sanctions list matching, rule-based risk scoring, and Gemini AI analysis to surface suspicious transactions, provide human-friendly explanations, and let investigators manage cases.
 
-Live demo: https://finatlas-wrin.onrender.com/
+Live app: https://finatlas-wrin.onrender.com/
 
 
 Features
@@ -13,25 +13,9 @@ Features
 - Rule-based scoring with configurable weights and Gemini verification for unusual-pattern detection.
 - Supabase persistence with per-user row-level security for screenings, batches and cases.
 - Supabase Auth integration with optional MFA enforcement (AAL2) for investigator accounts.
-- Per-user API keys stored in Supabase (plaintext) with immediate rotation/revoke.
+- Per-user API keys stored in Supabase (plaintext), with support for multiple active keys and rotation/revoke.
 
-Quick start
-1. Install Python dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-2. Set required secrets in the workspace Secrets panel or local environment using the `.env.example` as a guide (do not commit secrets):
-   - SUPABASE_URL, SUPABASE_KEY or SUPABASE_ANON_KEY
-   - SUPABASE_SERVICE_ROLE_KEY (required to authenticate API keys as bearer tokens)
-   - VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY (browser-safe keys)
-   - GEMINI_API_KEY (server-only)
-   - REQUIRE_AUTH, REQUIRE_MFA (true/false)
-3. Run the development server:
-   ```bash
-   npm run dev
-   # which invokes: python -m gunicorn -c gunicorn.conf.py wsgi:application
-   ```
-4. Open the UI at the served URL (default http://localhost:8000 or the live URL above).
+Open FinAtlas at https://finatlas-wrin.onrender.com/.
 
 Notes on authentication and MFA
 - New users receive a confirmation email after signup. Click the link in the email to complete confirmation; the frontend exchanges the confirmation `code` for a session and prompts to set up TOTP MFA.

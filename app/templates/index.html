@@ -330,23 +330,29 @@
       <section id="api-view" class="view hidden">
         <div class="card">
           <h3>REST API reference</h3>
-          <p class="text-muted">Protected endpoints accept a Supabase access token via <code>Authorization: Bearer &lt;token&gt;</code>.</p>
+          <p class="text-muted">Protected endpoints accept a Supabase access token or an active API key via <code>Authorization: Bearer &lt;token&gt;</code>.</p>
 
           <div class="api-block">
             <h4>POST /api/screen/single</h4>
             <p class="text-muted">Screen one transaction and persist the result.</p>
-            <pre class="code-block">curl -X POST "https://your-host/api/screen/single" \\
+            <div class="code-block-wrapper">
+              <button class="btn btn-sm btn-secondary copy-code" type="button">Copy</button>
+              <pre class="code-block">curl -X POST "https://finatlas-wrin.onrender.com/api/screen/single" \\
   -H "Authorization: Bearer &lt;token&gt;" \\
   -H "Content-Type: application/json" \\
   -d '{"transactionId":"TX-1","transactionDate":"2026-10-19","transactionType":"wire","amount":1500,"currency":"USD","senderName":"Alice","senderCountry":"US","receiverName":"Bob","receiverCountry":"GB"}'</pre>
+            </div>
           </div>
 
           <div class="api-block">
             <h4>POST /api/screen/batch</h4>
             <p class="text-muted">Screen a JSON list immediately, or upload a CSV. Add <code>?async=true</code> to queue background processing.</p>
-            <pre class="code-block">curl -X POST "https://your-host/api/screen/batch?async=true" \\
+            <div class="code-block-wrapper">
+              <button class="btn btn-sm btn-secondary copy-code" type="button">Copy</button>
+              <pre class="code-block">curl -X POST "https://finatlas-wrin.onrender.com/api/screen/batch?async=true" \\
   -H "Authorization: Bearer &lt;token&gt;" \\
   -F "file=@transactions.csv"</pre>
+            </div>
           </div>
 
           <div class="api-block">
@@ -367,16 +373,19 @@
           <div class="api-block">
             <h4>POST /api/cases</h4>
             <p class="text-muted">Create an investigation case linked to a screening.</p>
-            <pre class="code-block">curl -X POST "https://your-host/api/cases" \\
+            <div class="code-block-wrapper">
+              <button class="btn btn-sm btn-secondary copy-code" type="button">Copy</button>
+              <pre class="code-block">curl -X POST "https://finatlas-wrin.onrender.com/api/cases" \\
   -H "Authorization: Bearer &lt;token&gt;" \\
   -H "Content-Type: application/json" \\
   -d '{"screening_id":"&lt;id&gt;","status":"open","notes":"Escalated for review"}'</pre>
+            </div>
           </div>
 
           <!-- Per-user API keys -->
           <div class="api-block" id="api-keys-block">
             <h4>Your API keys</h4>
-            <p class="text-muted">Create and manage per-account API keys. Regenerating a key will revoke the previous key immediately.</p>
+            <p class="text-muted">Create multiple API keys for your integrations. Revoke or rotate a key at any time.</p>
             <div id="api-keys-container">Loading keys…</div>
             <div style="margin-top:0.75rem">
               <button id="create-api-key" class="btn btn-primary">Create API key</button>
