@@ -6,8 +6,9 @@ FinAtlas combines deterministic sanctions list matching, rule-based risk scoring
 
 Live app: https://finatlas-wrin.onrender.com/
 
+For a comprehensive technical overview, see **[`SPEC.md`](SPEC.md)** — covering the system architecture, screening methodology, risk-scoring algorithm, data sources, security, API reference, and planned future improvements.
 
-Features
+## Features
 - Single-transaction and batch screening (CSV or JSON) via REST API and the web UI.
 - Deterministic sanctions screening against local UNSC, EU and OFAC XML files.
 - Rule-based scoring with configurable weights and Gemini verification for unusual-pattern detection.
@@ -17,28 +18,29 @@ Features
 
 Open FinAtlas at https://finatlas-wrin.onrender.com/.
 
-Notes on authentication and MFA
+## Notes on authentication and MFA
 - New users receive a confirmation email after signup. Click the link in the email to complete confirmation; the frontend exchanges the confirmation `code` for a session and prompts to set up TOTP MFA.
-- REQUIRE_AUTH and REQUIRE_MFA environment variables control whether the app enforces authentication and MFA. Use `REQUIRE_AUTH=false` for local development only.
+- `REQUIRE_AUTH` and `REQUIRE_MFA` environment variables control whether the app enforces authentication and MFA. Use `REQUIRE_AUTH=false` for local development only.
 
-API
-- POST /api/screen/single — screen one transaction (requires auth unless disabled).
-- POST /api/screen/batch — screen a JSON list or upload CSV; add `?async=true` to queue a background job.
-- GET /api/screen/batch/<id> — poll status of background batch jobs.
-- GET /api/screenings — list your screenings.
-- GET /api/screenings/stats — dashboard statistics.
-- GET /api/screenings/<id> — screening detail including Gemini reasoning.
-- Cases API: GET/POST/PATCH/DELETE /api/cases
-- API Keys: GET/POST /api/api-keys, POST /api/api-keys/<id>/revoke, POST /api/api-keys/<id>/rotate
+## API
+- `POST /api/screen/single` — screen one transaction (requires auth unless disabled).
+- `POST /api/screen/batch` — screen a JSON list or upload CSV; add `?async=true` to queue a background job.
+- `GET /api/screen/batch/<id>` — poll status of background batch jobs.
+- `GET /api/screenings` — list your screenings.
+- `GET /api/screenings/stats` — dashboard statistics.
+- `GET /api/screenings/<id>` — screening detail including Gemini reasoning.
+- Cases API: `GET/POST/PATCH/DELETE /api/cases`
+- API Keys: `GET/POST /api/api-keys`, `POST /api/api-keys/<id>/revoke`, `POST /api/api-keys/<id>/rotate`
 - Protected API endpoints accept either a Supabase access token or an active API key in `Authorization: Bearer <token>`.
 
-Testing
+## Testing
 Run the test suite with:
-```
+
+```bash
 python -m pytest
 ```
 
-License
+## License
 MIT
 
-### Developed for NED × DevMarketplace Hackathon (19th-22nd October, 2026)
+### Developed for NED × DevMarketplace Hackathon (19th–22nd October, 2026)
